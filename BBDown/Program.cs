@@ -19,6 +19,8 @@ using BBDown.Core.Util;
 using System.Text.Json.Serialization;
 using System.CommandLine.Builder;
 using BBDown.Core.Entity;
+using BBDown.Core.DRM;
+using System.Diagnostics;
 
 namespace BBDown;
 
@@ -650,6 +652,12 @@ partial class Program
                 }
 
                 Log($"下载P{p.index}完毕");
+
+                if (parsedResult.IsDrm && myOption.DecryptDrm && !string.IsNullOrEmpty(parsedResult.KidHex))
+                {
+                    await DecryptDrmAsync(parsedResult, videoPath, audioPath, myOption);
+                }
+
                 if (!parsedResult.VideoTracks.Any()) videoPath = "";
                 if (!parsedResult.AudioTracks.Any()) audioPath = "";
                 if (myOption.SkipMux) return;
@@ -895,4 +903,109 @@ partial class Program
 
     [GeneratedRegex("<([\\w:\\-.]+?)>")]
     private static partial Regex InfoRegex();
+
+    private static async Task DecryptDrmAsync(ParsedResult parsed, string videoPath, string audioPath, MyOption myOption)
+    {
+        Log("检测到DRM加密，正在获取解密密钥...");
+
+        parsed.KeyHex = "";
+        
+        try
+        {
+            var keyResult = await CkcDecryptor.GetKeyAsync(parsed.KidHex);
+            if (keyResult != null)
+                parsed.KeyHex = keyResult.Value.keyHex;
+        }
+        catch { }
+
+        if (string.IsNullOrEmpty(parsed.KeyHex))
+        {
+            LogWarn("============================================");
+            LogWarn("自动密钥提取失败，文件将保持加密状态。");
+            LogWarn("");
+            LogWarn("请使用以下方式手动提供密钥：");
+            LogWarn($"  BBDown <url> --key <KEY_HEX> --kid {parsed.KidHex}");
+            LogWarn("");
+            LogWarn("获取密钥的方法：");
+            LogWarn("  1. 打开视频页面，F12 控制台粘贴 bilibili_ckc_extractor.js");
+            LogWarn("  2. 或使用 --cookie 登录后重试");
+            LogWarn("============================================");
+            return;
+        }
+
+        Log($"密钥获取成功: KEY={parsed.KeyHex[..8]}...");
+
+        var mp4decrypt = FindTool("mp4decrypt");
+        if (string.IsNullOrEmpty(mp4decrypt))
+        {
+            LogError("未找到 mp4decrypt，请安装 Bento4 (brew install bento4)");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(videoPath) && File.Exists(videoPath))
+        {
+            Log("解密视频流...");
+            var tmpVideo = videoPath + ".dec";
+            await RunDecryptAsync(mp4decrypt, parsed.KidHex, parsed.KeyHex, videoPath, tmpVideo);
+            if (File.Exists(tmpVideo) && new FileInfo(tmpVideo).Length > 0)
+            {
+                File.Delete(videoPath);
+                File.Move(tmpVideo, videoPath);
+                Log("视频解密完成");
+            }
+        }
+
+        if (!string.IsNullOrEmpty(audioPath) && File.Exists(audioPath))
+        {
+            Log("解密音频流...");
+            var tmpAudio = audioPath + ".dec";
+            await RunDecryptAsync(mp4decrypt, parsed.KidHex, parsed.KeyHex, audioPath, tmpAudio);
+            if (File.Exists(tmpAudio) && new FileInfo(tmpAudio).Length > 0)
+            {
+                File.Delete(audioPath);
+                File.Move(tmpAudio, audioPath);
+                Log("音频解密完成");
+            }
+        }
+    }
+
+    private static async Task RunDecryptAsync(string mp4decrypt, string kid, string key, string input, string output)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = mp4decrypt,
+            Arguments = $"--key {kid}:{key} \"{input}\" \"{output}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        using var proc = Process.Start(psi);
+        if (proc == null) return;
+        await proc.WaitForExitAsync();
+
+        if (proc.ExitCode != 0)
+        {
+            var err = await proc.StandardError.ReadToEndAsync();
+            LogError($"mp4decrypt failed: {err}");
+        }
+    }
+
+    private static string? FindTool(string name)
+    {
+        var paths = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>();
+        foreach (var dir in paths)
+        {
+            var full = Path.Combine(dir, name);
+            if (File.Exists(full)) return full;
+        }
+        var extra = new[] { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" };
+        foreach (var dir in extra)
+        {
+            var full = Path.Combine(dir, name);
+            if (File.Exists(full)) return full;
+        }
+        return null;
+    }
 }

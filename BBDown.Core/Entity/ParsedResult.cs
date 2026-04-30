@@ -13,4 +13,10 @@ public class ParsedResult
     // ⬇⬇⬇⬇⬇ FOR FLV ⬇⬇⬇⬇⬇
     public List<string> Clips { get; set; } = new();
     public List<string> Dfns { get; set; } = new();
+    // ⬇⬇⬇⬇⬇ DRM ⬇⬇⬇⬇⬇
+    public bool IsDrm { get; set; }
+    public int DrmTechType { get; set; }
+    public string DrmType { get; set; } = "";
+    public string KidHex { get; set; } = "";
+    public string KeyHex { get; set; } = "";
 }
