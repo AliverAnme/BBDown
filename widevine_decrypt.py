@@ -32,16 +32,25 @@ def main():
     cdm = Cdm.from_device(device)
     session_id = cdm.open()
 
-    challenge = cdm.get_license_challenge(session_id, pssh)
+    try:
+        challenge = cdm.get_license_challenge(session_id, pssh)
 
-    resp = requests.post(LICENSE_URL, data=challenge, headers={
-        **HEADERS, "Content-Type": "application/x-protobuf"
-    })
-    resp.raise_for_status()
+        try:
+            resp = requests.post(
+                LICENSE_URL,
+                data=challenge,
+                headers={**HEADERS, "Content-Type": "application/x-protobuf"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(json.dumps({"error": f"License request failed: {e}"}))
+            sys.exit(1)
 
-    cdm.parse_license(session_id, resp.content)
-    keys = cdm.get_keys(session_id)
-    cdm.close(session_id)
+        cdm.parse_license(session_id, resp.content)
+        keys = cdm.get_keys(session_id)
+    finally:
+        cdm.close(session_id)
 
     result_keys = []
     for k in keys:
