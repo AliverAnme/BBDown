@@ -942,9 +942,7 @@ partial class Program
             }
             else
             {
-                var keyResult = await DrmDecryptor.GetKeyCkcAsync(parsed.KidHex);
-                if (keyResult != null)
-                    parsed.KeyHex = keyResult.Value.keyHex;
+                LogWarn("课程DRM需手动提供密钥 (浏览器扩展提取)");
             }
         }
         catch { }
