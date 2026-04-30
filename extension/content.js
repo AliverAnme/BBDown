@@ -16,7 +16,18 @@
   }
 
   function addWidevineData(pssh, license) {
-    WIDEVINE_DATA.push({ pssh, license_hex: license, url: location.href, title: document.title, time: Date.now() });
+    // If called with no PSSH (license-only), try to pair with the most recent
+    // entry that already has a PSSH but is still waiting for a license.
+    if (!pssh) {
+      const last = WIDEVINE_DATA[WIDEVINE_DATA.length - 1];
+      if (last && last.pssh && !last.license_hex) {
+        last.license_hex = license;
+        save();
+        console.log('%c[BBDown] Widevine license paired with PSSH entry', 'color:cyan');
+        return;
+      }
+    }
+    WIDEVINE_DATA.push({ pssh: pssh || '', license_hex: license, url: location.href, title: document.title, time: Date.now() });
     save();
     console.log('%c[BBDown] Widevine license captured', 'color:cyan');
   }

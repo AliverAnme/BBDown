@@ -21,9 +21,10 @@ public static class DrmDecryptor
             return null;
         }
 
+        var pyExe = await FindPythonExeAsync() ?? "python3";
         var psi = new ProcessStartInfo
         {
-            FileName = "python3",
+            FileName = pyExe,
             Arguments = $"\"{extractor}\" \"{psshB64}\" \"{wvdPath}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -73,11 +74,14 @@ public static class DrmDecryptor
 
     private static async Task<(bool ok, string msg)> CheckPythonAsync()
     {
+        var pyExe = await FindPythonExeAsync();
+        if (pyExe == null)
+            return (false, "Python 未安装，Widevine 需要 Python: https://www.python.org/downloads/");
         try
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "python3",
+                FileName = pyExe,
                 Arguments = "-c \"from pywidevine import Device\"",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -85,7 +89,7 @@ public static class DrmDecryptor
                 CreateNoWindow = true,
             };
             using var proc = Process.Start(psi);
-            if (proc == null) return (false, "python3 未安装");
+            if (proc == null) return (false, "Python 未找到");
             await proc.WaitForExitAsync();
             if (proc.ExitCode != 0)
                 return (false, "pywidevine 未安装，请运行: pip install pywidevine 'construct==2.8.8'");
@@ -93,8 +97,33 @@ public static class DrmDecryptor
         }
         catch
         {
-            return (false, "python3 未安装，Widevine 需要 Python: brew install python3");
+            return (false, "Python 未安装，Widevine 需要 Python: https://www.python.org/downloads/");
         }
+    }
+
+    private static async Task<string?> FindPythonExeAsync()
+    {
+        foreach (var exe in new[] { "python3", "python" })
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                using var proc = Process.Start(psi);
+                if (proc == null) continue;
+                await proc.WaitForExitAsync();
+                if (proc.ExitCode == 0) return exe;
+            }
+            catch { }
+        }
+        return null;
     }
 
     private static string FindFile(string name)
