@@ -36,12 +36,14 @@ public static class DrmDecryptor
             using var proc = Process.Start(psi);
             if (proc == null) return null;
 
-            var output = await proc.StandardOutput.ReadToEndAsync();
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             await proc.WaitForExitAsync();
+            var output = await stdoutTask;
+            var error = await stderrTask;
 
             if (proc.ExitCode != 0)
             {
-                var error = await proc.StandardError.ReadToEndAsync();
                 if (error.Contains("ModuleNotFoundError") || error.Contains("No module named"))
                     Logger.LogWarn("pywidevine 未安装，请运行: pip install pywidevine 'construct==2.8.8'");
                 else if (error.Contains("Device"))
