@@ -945,7 +945,7 @@ partial class Program
                 LogWarn("课程DRM需手动提供密钥 (浏览器扩展提取)");
             }
         }
-        catch { }
+        catch (Exception ex) { LogWarn($"自动密钥提取异常: {ex.Message}"); }
 
         if (string.IsNullOrEmpty(parsed.KeyHex))
         {
