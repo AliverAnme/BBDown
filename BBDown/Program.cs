@@ -914,7 +914,7 @@ partial class Program
 
         if (!string.IsNullOrEmpty(parsed.KeyHex) && !string.IsNullOrEmpty(parsed.KidHex))
         {
-            Log($"使用手动提供的密钥: KEY={parsed.KeyHex[..8]}...");
+            Log($"使用手动提供的密钥: KEY={parsed.KeyHex[..Math.Min(8, parsed.KeyHex.Length)]}...");
         }
         else
         {
@@ -963,7 +963,7 @@ partial class Program
         }
         }
 
-        Log($"密钥获取成功: KEY={parsed.KeyHex[..8]}...");
+        Log($"密钥获取成功: KEY={parsed.KeyHex[..Math.Min(8, parsed.KeyHex.Length)]}...");
 
         var mp4decrypt = FindTool("mp4decrypt");
         if (string.IsNullOrEmpty(mp4decrypt))

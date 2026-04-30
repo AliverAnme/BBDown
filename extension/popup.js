@@ -1,6 +1,16 @@
 const $ = id => document.getElementById(id);
 let activeTab = 'keys';
 
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function render() {
   chrome.storage.local.get(['bbdown_keys','bbdown_wv'], data => {
     const keys = data.bbdown_keys || [];
@@ -16,10 +26,10 @@ function render() {
       if (!keys.length) { content.innerHTML = '<div class="empty">打开B站课程页面，播放视频后密钥自动出现</div>'; return; }
       content.innerHTML = keys.map((k,i) => `
         <div class="key-row">
-          <div class="kid">KID: ${k.kid}</div>
-          <div class="key">KEY: ${k.key}</div>
-          <div style="color:#666;margin-top:2px">${k.source} · ${new Date(k.time).toLocaleTimeString()}</div>
-          <div class="cmd">BBDown "${k.url}" --decrypt-drm --key ${k.key} --kid ${k.kid}</div>
+          <div class="kid">KID: ${escapeHtml(k.kid)}</div>
+          <div class="key">KEY: ${escapeHtml(k.key)}</div>
+          <div style="color:#666;margin-top:2px">${escapeHtml(k.source)} · ${escapeHtml(new Date(k.time).toLocaleTimeString())}</div>
+          <div class="cmd">BBDown &quot;${escapeHtml(k.url)}&quot; --decrypt-drm --key ${escapeHtml(k.key)} --kid ${escapeHtml(k.kid)}</div>
           <button class="btn" data-copy="${i}">复制命令</button>
           <button class="btn" data-copy-key="${i}">仅复制KEY</button>
         </div>
@@ -33,12 +43,12 @@ function render() {
       if (!wv.length) { content.innerHTML = '<div class="empty">打开B站番劇页面，播放DRM视频后数据自动出现</div>'; return; }
       content.innerHTML = wv.map((w,i) => `
         <div class="key-row">
-          <div style="color:#0af">PSSH: ${w.pssh ? w.pssh.slice(0,60)+'...' : '(待捕获)'}</div>
-          <div style="color:#0af">License: ${w.license_hex ? w.license_hex.slice(0,60)+'...' : '(待捕获)'}</div>
-          <div style="color:#666;margin-top:2px">${new Date(w.time).toLocaleTimeString()}</div>
+          <div style="color:#0af">PSSH: ${w.pssh ? escapeHtml(w.pssh.slice(0,60))+'...' : '(待捕获)'}</div>
+          <div style="color:#0af">License: ${w.license_hex ? escapeHtml(w.license_hex.slice(0,60))+'...' : '(待捕获)'}</div>
+          <div style="color:#666;margin-top:2px">${escapeHtml(new Date(w.time).toLocaleTimeString())}</div>
           <div class="cmd" style="color:#ff0">
-            离线解密: python3 widevine_decrypt.py "${w.pssh || 'PSSH'}" device.wvd<br>
-            然后: BBDown "${w.url}" --decrypt-drm --key KEY --kid KID
+            离线解密: python3 widevine_decrypt.py &quot;${escapeHtml(w.pssh || 'PSSH')}&quot; device.wvd<br>
+            然后: BBDown &quot;${escapeHtml(w.url)}&quot; --decrypt-drm --key KEY --kid KID
           </div>
         </div>
       `).join('');
