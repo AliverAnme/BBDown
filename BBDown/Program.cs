@@ -455,6 +455,7 @@ partial class Program
             }
 
             //调用解析
+            Config.WANT_DRM = myOption.DecryptDrm;
             ParsedResult parsedResult = await ExtractTracksAsync(aidOri, p.aid, p.cid, p.epid, myOption.UseTvApi, myOption.UseIntlApi, myOption.UseAppApi, firstEncoding);
             List<AudioMaterial> audioMaterial = [];
             if (!p.points.Any())
@@ -691,6 +692,12 @@ partial class Program
             }
             else if (parsedResult.Clips.Any() && parsedResult.Dfns.Any())   //flv
             {
+                if (myOption.DecryptDrm)
+                {
+                    LogError("此视频需要大会员登录才能获取完整DRM内容。");
+                    LogError($"请先运行: BBDown login  或使用 --cookie 参数");
+                    return;
+                }
                 bool flag = false;
                 var clips = parsedResult.Clips;
                 var dfns = parsedResult.Dfns;
@@ -780,7 +787,15 @@ partial class Program
             }
             else
             {
-                LogError("解析此分P失败(建议--debug查看详细信息)");
+                if (myOption.DecryptDrm)
+                {
+                    LogError("此视频需要大会员登录才能获取完整DRM内容。");
+                    LogError("请先运行: BBDown login  或使用 --cookie 参数");
+                }
+                else
+                {
+                    LogError("解析此分P失败(建议--debug查看详细信息)");
+                }
                 if (parsedResult.WebJsonString.Length < 100)
                 {
                     LogError(parsedResult.WebJsonString);

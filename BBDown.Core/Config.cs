@@ -18,6 +18,7 @@ public static class Config
     public static string AREA { get; set; } = "";
 
     public static string WBI { get; set; } = "";
+    public static bool WANT_DRM { get; set; } = false;
 
     public static readonly Dictionary<string, string> qualitys = new() {
         {"127","8K 超高清" }, {"126","杜比视界" }, {"125","HDR 真彩" }, {"120","4K 超清" }, {"116","1080P 高帧率" },
