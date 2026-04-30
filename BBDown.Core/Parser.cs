@@ -58,7 +58,7 @@ public static partial class Parser
         }
 
         //课程接口
-        if (cheese) api = api.Replace("/pgc/", "/pugv/");
+        if (cheese) api = api.Replace("/pgc/player/web/v2/playurl", "/pugv/player/web/playurl");
 
         //Console.WriteLine(api);
         string webJson = await GetWebSourceAsync(api);
@@ -189,6 +189,12 @@ public static partial class Parser
             try { pDur = root.GetProperty("dash").GetProperty("duration").GetInt32(); } catch { }
             try { pDur = root.GetProperty("timelength").GetInt32() / 1000; } catch { }
 
+            // DRM metadata
+            try { parsedResult.IsDrm = root.GetProperty("is_drm").GetBoolean(); } catch { }
+            try { parsedResult.DrmTechType = root.GetProperty("drm_tech_type").GetInt32(); } catch { }
+            try { parsedResult.DrmType = root.GetProperty("drm_type").GetString() ?? ""; } catch { }
+            if (parsedResult.IsDrm) LogDebug("DRM detected: type={0}, tech={1}", parsedResult.DrmType, parsedResult.DrmTechType);
+
             bool reParse = false;
             reParse:
             if (reParse)
@@ -265,6 +271,24 @@ public static partial class Parser
                         v.fps = node.GetProperty("frame_rate").ToString();
                     }
                     if (!parsedResult.VideoTracks.Contains(v)) parsedResult.VideoTracks.Add(v);
+                }
+
+                if (parsedResult.IsDrm && string.IsNullOrEmpty(parsedResult.KidHex))
+                {
+                    try
+                    {
+                        var firstVideo = video.First();
+                        if (firstVideo.TryGetProperty("bilidrm_uri", out var drmUri))
+                        {
+                            var uri = drmUri.GetString() ?? "";
+                            var lastSlash = uri.LastIndexOf("//", StringComparison.Ordinal);
+                            if (lastSlash >= 0)
+                                parsedResult.KidHex = uri[(lastSlash + 2)..];
+                        }
+                        if (firstVideo.TryGetProperty("widevine_pssh", out var pssh) && pssh.GetString() is string ps && ps.Length > 0)
+                            parsedResult.PsshBase64 = ps;
+                    }
+                    catch { }
                 }
             }
 
