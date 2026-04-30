@@ -908,10 +908,18 @@ partial class Program
     {
         Log("检测到DRM加密，正在获取解密密钥...");
 
-        parsed.KeyHex = "";
-        
-        try
+        parsed.KeyHex = myOption.DrmKeyHex ?? "";
+        if (!string.IsNullOrEmpty(myOption.DrmKidHex))
+            parsed.KidHex = myOption.DrmKidHex;
+
+        if (!string.IsNullOrEmpty(parsed.KeyHex) && !string.IsNullOrEmpty(parsed.KidHex))
         {
+            Log($"使用手动提供的密钥: KEY={parsed.KeyHex[..8]}...");
+        }
+        else
+        {
+            try
+            {
             if (parsed.DrmTechType == 2)
             {
                 if (!string.IsNullOrEmpty(parsed.PsshBase64))
@@ -954,6 +962,7 @@ partial class Program
             LogWarn("  2. 或使用 --cookie 登录后重试");
             LogWarn("============================================");
             return;
+        }
         }
 
         Log($"密钥获取成功: KEY={parsed.KeyHex[..8]}...");
