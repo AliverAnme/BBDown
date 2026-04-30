@@ -19,4 +19,14 @@
     <Protobuf Include="APP\**\*.proto" GrpcServices="Client" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="device.wvd">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\widevine_decrypt.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>widevine_decrypt.py</Link>
+    </None>
+  </ItemGroup>
+
 </Project>

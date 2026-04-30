@@ -5,24 +5,26 @@ namespace BBDown.Core.DRM;
 
 public static class DrmDecryptor
 {
-    public static async Task<(string kid, string keyHex)?> GetKeyCkcAsync(string kidHex)
-    {
-        var extractor = FindExtractor("ckc_puppeteer.js");
-        return await RunNodeExtractor(extractor, kidHex);
-    }
-
     public static async Task<(string kid, string keyHex)?> GetKeyWidevineAsync(string psshB64, string wvdPath)
     {
-        var extractor = FindExtractor("widevine_decrypt.py");
+        var extractor = FindFile("widevine_decrypt.py");
         if (!File.Exists(extractor))
         {
-            Logger.LogError($"Widevine extractor not found: {extractor}");
+            Logger.LogWarn("widevine_decrypt.py 未找到，跳过自动解密");
             return null;
         }
 
+        var (pythonOk, pythonMsg) = await CheckPythonAsync();
+        if (!pythonOk)
+        {
+            Logger.LogWarn(pythonMsg);
+            return null;
+        }
+
+        var pyExe = await FindPythonExeAsync() ?? "python3";
         var psi = new ProcessStartInfo
         {
-            FileName = "python3",
+            FileName = pyExe,
             Arguments = $"\"{extractor}\" \"{psshB64}\" \"{wvdPath}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -35,112 +37,102 @@ public static class DrmDecryptor
             using var proc = Process.Start(psi);
             if (proc == null) return null;
 
-            var output = await proc.StandardOutput.ReadToEndAsync();
-            var error = await proc.StandardError.ReadToEndAsync();
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             await proc.WaitForExitAsync();
+            var output = await stdoutTask;
+            var error = await stderrTask;
 
             if (proc.ExitCode != 0)
             {
-                Logger.LogError($"Widevine extractor error: {error}");
+                if (error.Contains("ModuleNotFoundError") || error.Contains("No module named"))
+                    Logger.LogWarn("pywidevine 未安装，请运行: pip install pywidevine 'construct==2.8.8'");
+                else if (error.Contains("Device"))
+                    Logger.LogWarn($"device.wvd 无效: {error.Trim()[..Math.Min(100, error.Length)]}");
+                else
+                    Logger.LogWarn($"Widevine 解密失败: {error.Trim()[..Math.Min(100, error.Length)]}");
                 return null;
             }
 
             using var doc = JsonDocument.Parse(output);
             var root = doc.RootElement;
-
-            if (root.TryGetProperty("error", out var err))
-            {
-                Logger.LogError($"Widevine error: {err}");
-                return null;
-            }
+            if (root.TryGetProperty("error", out var err)) return null;
 
             var keys = root.GetProperty("keys");
             if (keys.GetArrayLength() > 0)
             {
-                var firstKey = keys[0];
-                return (firstKey.GetProperty("kid").GetString()!,
-                        firstKey.GetProperty("key").GetString()!);
+                var k = keys[0];
+                return (k.GetProperty("kid").GetString()!, k.GetProperty("key").GetString()!);
             }
             return null;
         }
-        catch (Exception ex)
+        catch
         {
-            Logger.LogError($"Widevine exception: {ex.Message}");
             return null;
         }
     }
 
-    private static async Task<(string kid, string keyHex)?> RunNodeExtractor(string extractor, string kidHex)
+    private static async Task<(bool ok, string msg)> CheckPythonAsync()
     {
-        if (!File.Exists(extractor))
-        {
-            Logger.LogError($"Extractor not found: {extractor}");
-            return null;
-        }
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = "node",
-            Arguments = $"\"{extractor}\" {kidHex}",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-
-        var extractorDir = Path.GetDirectoryName(extractor);
-        if (!string.IsNullOrEmpty(extractorDir))
-        {
-            psi.Environment["NODE_PATH"] = Path.Combine(extractorDir, "node_modules");
-        }
-
+        var pyExe = await FindPythonExeAsync();
+        if (pyExe == null)
+            return (false, "Python 未安装，Widevine 需要 Python: https://www.python.org/downloads/");
         try
         {
+            var psi = new ProcessStartInfo
+            {
+                FileName = pyExe,
+                Arguments = "-c \"from pywidevine import Device\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
             using var proc = Process.Start(psi);
-            if (proc == null) return null;
-
-            var output = await proc.StandardOutput.ReadToEndAsync();
-            var error = await proc.StandardError.ReadToEndAsync();
+            if (proc == null) return (false, "Python 未找到");
             await proc.WaitForExitAsync();
-
             if (proc.ExitCode != 0)
-            {
-                Logger.LogError($"Extractor failed: {error}");
-                return null;
-            }
-
-            using var result = JsonDocument.Parse(output);
-            var root = result.RootElement;
-
-            if (root.TryGetProperty("error", out var err))
-            {
-                Logger.LogError($"Error: {err}");
-                return null;
-            }
-
-            var keyHex = root.GetProperty("key_hex").GetString()!;
-            return (kidHex, keyHex);
+                return (false, "pywidevine 未安装，请运行: pip install pywidevine 'construct==2.8.8'");
+            return (true, "");
         }
-        catch (Exception ex)
+        catch
         {
-            Logger.LogError($"Extractor exception: {ex.Message}");
-            return null;
+            return (false, "Python 未安装，Widevine 需要 Python: https://www.python.org/downloads/");
         }
     }
 
-    private static string FindExtractor(string name)
+    private static async Task<string?> FindPythonExeAsync()
     {
-        var candidates = new[]
+        foreach (var exe in new[] { "python3", "python" })
         {
-            Path.Combine(AppContext.BaseDirectory, name),
-            Path.Combine(Directory.GetCurrentDirectory(), name),
-        };
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                using var proc = Process.Start(psi);
+                if (proc == null) continue;
+                await proc.WaitForExitAsync();
+                if (proc.ExitCode == 0) return exe;
+            }
+            catch { }
+        }
+        return null;
+    }
 
-        foreach (var path in candidates)
+    private static string FindFile(string name)
+    {
+        foreach (var dir in new[] { AppContext.BaseDirectory, Directory.GetCurrentDirectory() })
         {
+            var path = Path.Combine(dir, name);
             if (File.Exists(path)) return path;
         }
-
-        return candidates[0];
+        return Path.Combine(AppContext.BaseDirectory, name);
     }
 }

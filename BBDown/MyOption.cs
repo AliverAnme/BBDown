@@ -24,6 +24,8 @@ internal class MyOption
     public bool Debug { get; set; }
     public bool SkipMux { get; set; }
     public bool DecryptDrm { get; set; }
+    public string? DrmKeyHex { get; set; }
+    public string? DrmKidHex { get; set; }
     public bool SkipSubtitle { get; set; }
     public bool SkipCover { get; set; }
     public bool ForceHttp { get; set; } = true;

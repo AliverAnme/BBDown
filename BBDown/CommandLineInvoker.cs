@@ -31,7 +31,9 @@ internal static class CommandLineInvoker
     private static readonly Option<bool> SubOnly = new(["--sub-only"], "仅下载字幕");
     private static readonly Option<bool> Debug = new(["--debug"], "输出调试日志");
     private static readonly Option<bool> SkipMux = new(["--skip-mux"], "跳过混流步骤");
-    private static readonly Option<bool> DecryptDrm = new(["--decrypt-drm", "-drm"], "尝试解密的DRM保护视频 (需要Node.js + ckc_extractor.js)");
+    private static readonly Option<bool> DecryptDrm = new(["--decrypt-drm", "-drm"], "尝试解密的DRM保护视频");
+    private static readonly Option<string> DrmKey = new(["--key"], "DRM解密密钥 (hex)");
+    private static readonly Option<string> DrmKid = new(["--kid"], "DRM密钥ID (hex)");
     private static readonly Option<bool> SkipSubtitle = new(["--skip-subtitle"], "跳过字幕下载");
     private static readonly Option<bool> SkipCover = new(["--skip-cover"], "跳过封面下载");
     private static readonly Option<bool> ForceHttp = new(["--force-http"], "下载音视频时强制使用HTTP协议替换HTTPS(默认开启)");
@@ -120,6 +122,8 @@ internal static class CommandLineInvoker
             if (bindingContext.ParseResult.HasOption(Debug)) option.Debug = bindingContext.ParseResult.GetValueForOption(Debug)!;
             if (bindingContext.ParseResult.HasOption(SkipMux)) option.SkipMux = bindingContext.ParseResult.GetValueForOption(SkipMux)!;
     if (bindingContext.ParseResult.HasOption(DecryptDrm)) option.DecryptDrm = bindingContext.ParseResult.GetValueForOption(DecryptDrm)!;
+    if (bindingContext.ParseResult.HasOption(DrmKey)) option.DrmKeyHex = bindingContext.ParseResult.GetValueForOption(DrmKey);
+    if (bindingContext.ParseResult.HasOption(DrmKid)) option.DrmKidHex = bindingContext.ParseResult.GetValueForOption(DrmKid);
             if (bindingContext.ParseResult.HasOption(SkipSubtitle)) option.SkipSubtitle = bindingContext.ParseResult.GetValueForOption(SkipSubtitle)!;
             if (bindingContext.ParseResult.HasOption(SkipCover)) option.SkipCover = bindingContext.ParseResult.GetValueForOption(SkipCover)!;
             if (bindingContext.ParseResult.HasOption(ForceHttp)) option.ForceHttp = bindingContext.ParseResult.GetValueForOption(ForceHttp)!;
@@ -186,6 +190,8 @@ internal static class CommandLineInvoker
             Debug,
             SkipMux,
             DecryptDrm,
+            DrmKey,
+            DrmKid,
             SkipSubtitle,
             SkipCover,
             ForceHttp,

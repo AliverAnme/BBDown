@@ -374,3 +374,11 @@ debug_*.json
 /BBDown/*.mp4
 /BBDown/*.xml
 /BBDown/*.ass
+BBDown/bin/
+BBDown/obj/
+BBDown/113467918909944/
+*.mp4
+*.m4a
+*.m4s
+node_modules/
+/tmp/

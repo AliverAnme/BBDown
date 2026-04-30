@@ -908,10 +908,18 @@ partial class Program
     {
         Log("检测到DRM加密，正在获取解密密钥...");
 
-        parsed.KeyHex = "";
-        
-        try
+        parsed.KeyHex = myOption.DrmKeyHex ?? "";
+        if (!string.IsNullOrEmpty(myOption.DrmKidHex))
+            parsed.KidHex = myOption.DrmKidHex;
+
+        if (!string.IsNullOrEmpty(parsed.KeyHex) && !string.IsNullOrEmpty(parsed.KidHex))
         {
+            Log($"使用手动提供的密钥: KEY={parsed.KeyHex[..Math.Min(8, parsed.KeyHex.Length)]}...");
+        }
+        else
+        {
+            try
+            {
             if (parsed.DrmTechType == 2)
             {
                 if (!string.IsNullOrEmpty(parsed.PsshBase64))
@@ -934,12 +942,10 @@ partial class Program
             }
             else
             {
-                var keyResult = await DrmDecryptor.GetKeyCkcAsync(parsed.KidHex);
-                if (keyResult != null)
-                    parsed.KeyHex = keyResult.Value.keyHex;
+                LogWarn("课程DRM需手动提供密钥 (浏览器扩展提取)");
             }
         }
-        catch { }
+        catch (Exception ex) { LogWarn($"自动密钥提取异常: {ex.Message}"); }
 
         if (string.IsNullOrEmpty(parsed.KeyHex))
         {
@@ -955,8 +961,9 @@ partial class Program
             LogWarn("============================================");
             return;
         }
+        }
 
-        Log($"密钥获取成功: KEY={parsed.KeyHex[..8]}...");
+        Log($"密钥获取成功: KEY={parsed.KeyHex[..Math.Min(8, parsed.KeyHex.Length)]}...");
 
         var mp4decrypt = FindTool("mp4decrypt");
         if (string.IsNullOrEmpty(mp4decrypt))
