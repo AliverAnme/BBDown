@@ -912,9 +912,32 @@ partial class Program
         
         try
         {
-            var keyResult = await CkcDecryptor.GetKeyAsync(parsed.KidHex);
-            if (keyResult != null)
-                parsed.KeyHex = keyResult.Value.keyHex;
+            if (parsed.DrmTechType == 2)
+            {
+                if (!string.IsNullOrEmpty(parsed.PsshBase64))
+                {
+                    var wvd = FindTool("device.wvd") ?? Path.Combine(AppContext.BaseDirectory, "device.wvd");
+                    if (File.Exists(wvd))
+                    {
+                        var keyResult = await DrmDecryptor.GetKeyWidevineAsync(parsed.PsshBase64, wvd);
+                        if (keyResult != null)
+                        {
+                            parsed.KeyHex = keyResult.Value.keyHex;
+                            parsed.KidHex = keyResult.Value.kid;
+                        }
+                    }
+                    else
+                    {
+                        LogWarn("Widevine DRM 需要 device.wvd 文件，请放置到程序目录");
+                    }
+                }
+            }
+            else
+            {
+                var keyResult = await DrmDecryptor.GetKeyCkcAsync(parsed.KidHex);
+                if (keyResult != null)
+                    parsed.KeyHex = keyResult.Value.keyHex;
+            }
         }
         catch { }
 

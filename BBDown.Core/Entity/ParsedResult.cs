@@ -19,4 +19,5 @@ public class ParsedResult
     public string DrmType { get; set; } = "";
     public string KidHex { get; set; } = "";
     public string KeyHex { get; set; } = "";
+    public string PsshBase64 { get; set; } = "";
 }

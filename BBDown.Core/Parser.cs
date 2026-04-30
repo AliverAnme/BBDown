@@ -285,6 +285,8 @@ public static partial class Parser
                             if (lastSlash >= 0)
                                 parsedResult.KidHex = uri[(lastSlash + 2)..];
                         }
+                        if (firstVideo.TryGetProperty("widevine_pssh", out var pssh) && pssh.GetString() is string ps && ps.Length > 0)
+                            parsedResult.PsshBase64 = ps;
                     }
                     catch { }
                 }
