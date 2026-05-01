@@ -957,7 +957,7 @@ partial class Program
             }
             else
             {
-                LogWarn("课程DRM需手动提供密钥 (浏览器扩展提取)");
+                LogWarn("当前DRM类型不支持自动解密，请使用 --key --kid 手动提供密钥");
             }
         }
         catch (Exception ex) { LogWarn($"自动密钥提取异常: {ex.Message}"); }
@@ -967,12 +967,10 @@ partial class Program
             LogWarn("============================================");
             LogWarn("自动密钥提取失败，文件将保持加密状态。");
             LogWarn("");
-            LogWarn("请使用以下方式手动提供密钥：");
-            LogWarn($"  BBDown <url> --key <KEY_HEX> --kid {parsed.KidHex}");
-            LogWarn("");
-            LogWarn("获取密钥的方法：");
-            LogWarn("  1. 打开视频页面，F12 控制台粘贴 bilibili_ckc_extractor.js");
-            LogWarn("  2. 或使用 --cookie 登录后重试");
+            LogWarn("解决方案：");
+            LogWarn("  1. 确保 Python + pywidevine 已安装:");
+            LogWarn("     pip install pywidevine 'construct==2.8.8'");
+            LogWarn($"  2. 或手动指定: BBDown <url> --key <KEY_HEX> --kid {parsed.KidHex}");
             LogWarn("============================================");
             return;
         }
