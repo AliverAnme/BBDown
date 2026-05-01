@@ -52,7 +52,8 @@ public static partial class Parser
             if (Config.AREA != "") apiBuilder.Append($"&access_key={Config.TOKEN}&area={Config.AREA}");
             apiBuilder.Append($"&otype=json&qn={qn}");
             if (bangumi) apiBuilder.Append($"&module=bangumi&ep_id={epId}&session=");
-            if (Config.COOKIE == "") apiBuilder.Append("&try_look=1");
+            if (Config.COOKIE == "" && !Config.WANT_DRM) apiBuilder.Append("&try_look=1");
+            if (Config.WANT_DRM) apiBuilder.Append("&drm_tech_type=2");
             apiBuilder.Append($"&wts={GetTimeStamp(true)}");
             api = prefix + (bangumi ? apiBuilder.ToString() : WbiSign(apiBuilder.ToString()));
         }
