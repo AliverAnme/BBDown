@@ -115,4 +115,74 @@
   };
 
   console.log('%c[BBDown DRM Extractor] Active — keys will appear in extension popup', 'color:lime;font-size:14px');
+
+  // Intercept WebAssembly.instantiate to capture the DRM WASM instance
+  const origInstantiate = WebAssembly.instantiate;
+  WebAssembly.instantiate = async function(...args) {
+    const result = await origInstantiate.apply(this, args);
+    if (result.instance?.exports?._biliDRMGenSPC) {
+      window.__bbdown_wasm = result.instance.exports;
+      window.__bbdown_drm = {
+        malloc: result.instance.exports._malloc || result.instance.exports.malloc,
+        free: result.instance.exports._free || result.instance.exports.free,
+        biliDRMGenSPC: function(kid, nonce, cert) {
+          return result.instance.exports._biliDRMGenSPC(kid, nonce, cert);
+        },
+        biliDRMParseCKC: function(ckc, nonce) {
+          return result.instance.exports._biliDRMParseCKC(ckc, nonce);
+        }
+      };
+      console.log('%c[BBDown] DRM WASM captured! Functions available on window.__bbdown_drm', 'color:lime;font-size:16px');
+    }
+    return result;
+  };
+
+  const origInstantiateStreaming = WebAssembly.instantiateStreaming;
+  if (origInstantiateStreaming) {
+    WebAssembly.instantiateStreaming = async function(...args) {
+      const result = await origInstantiateStreaming.apply(this, args);
+      if (result.instance?.exports?._biliDRMGenSPC) {
+        window.__bbdown_wasm = result.instance.exports;
+        window.__bbdown_drm = {
+          biliDRMGenSPC: result.instance.exports._biliDRMGenSPC,
+          biliDRMParseCKC: result.instance.exports._biliDRMParseCKC,
+        };
+        console.log('%c[BBDown] DRM WASM captured via streaming!', 'color:lime;font-size:16px');
+      }
+      return result;
+    };
+  }
+
+  async function runCkcFlow(kidHex) {
+    if (!window.__bbdown_drm?.biliDRMGenSPC) return null;
+    try {
+      const certResp = await fetch('https://bvc-drm.bilivideo.com/cer/bilibili_certificate.bin');
+      const cert = new Uint8Array(await certResp.arrayBuffer());
+      const nonce = Math.random().toString(36).slice(2, 18);
+      const spc = window.__bbdown_drm.biliDRMGenSPC(kidHex, nonce, cert);
+      const ckcResp = await fetch('https://bvc-drm.bilivideo.com/bilidrm', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({spc: spc})
+      });
+      const data = await ckcResp.json();
+      if (!data.data?.ckc) return null;
+      const ckcBytes = Uint8Array.from(atob(data.data.ckc), c => c.charCodeAt(0));
+      const result = window.__bbdown_drm.biliDRMParseCKC(ckcBytes, nonce);
+      const keyHex = Array.from(result.key||result).map(b => b.toString(16).padStart(2,'0')).join('');
+      return { kid: kidHex, key_hex: keyHex };
+    } catch(e) {
+      console.error('[BBDown] CKC error:', e);
+      return null;
+    }
+  }
+
+  setTimeout(async () => {
+    if (window.__bbdown_drm?.biliDRMGenSPC) {
+      const drm = await runCkcFlow('9e12d76dc9714c86bdaf00d3ecf6f081');
+      if (drm) {
+        window.__bbdown_auto_key = drm;
+        addKey(drm.kid, drm.key_hex, 'CKC-auto');
+      }
+    }
+  }, 8000);
 })();
