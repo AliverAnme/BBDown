@@ -654,7 +654,7 @@ partial class Program
 
                 Log($"下载P{p.index}完毕");
 
-                if (parsedResult.IsDrm && myOption.DecryptDrm && !string.IsNullOrEmpty(parsedResult.KidHex))
+                if (parsedResult.IsDrm && myOption.DecryptDrm && (!string.IsNullOrEmpty(parsedResult.KidHex) || !string.IsNullOrEmpty(parsedResult.PsshBase64)))
                 {
                     await DecryptDrmAsync(parsedResult, videoPath, audioPath, myOption);
                 }
