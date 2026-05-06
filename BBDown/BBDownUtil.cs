@@ -618,7 +618,8 @@ static partial class BBDownUtil
         {
             var api = "https://api.bilibili.com/x/web-interface/nav";
             var source = await GetWebSourceAsync(api);
-            var json = JsonDocument.Parse(source).RootElement;
+            using var navDoc = JsonDocument.Parse(source);
+            var json = navDoc.RootElement;
             var is_login = json.GetProperty("data").GetProperty("isLogin").GetBoolean();
             var wbi_img = json.GetProperty("data").GetProperty("wbi_img");
             Core.Config.WBI = GetMixinKey(RSubString(wbi_img.GetProperty("img_url").GetString()!) + RSubString(wbi_img.GetProperty("sub_url").GetString()!));

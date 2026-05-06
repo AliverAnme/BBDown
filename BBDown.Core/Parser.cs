@@ -462,6 +462,7 @@ public static partial class Parser
 
         }
 
+        respJson.Dispose();
         return parsedResult;
     }
 

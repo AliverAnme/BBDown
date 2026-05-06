@@ -461,7 +461,7 @@ public static partial class SubUtil
     private static string ConvertSubFromJson(string jsonString)
     {
         StringBuilder lines = new();
-        var json = JsonDocument.Parse(jsonString);
+        using var json = JsonDocument.Parse(jsonString);
         var sub = json.RootElement.GetProperty("body").EnumerateArray().ToList();
         for(int i = 0; i < sub.Count; i++)
         {
