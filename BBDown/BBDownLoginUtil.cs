@@ -66,7 +66,9 @@ internal static class BBDownLoginUtil
                     string cc = JsonDocument.Parse(w).RootElement.GetProperty("data").GetProperty("url").ToString();
                     Log("登录成功: SESSDATA=" + GetQueryString("SESSDATA", cc));
                     //导出cookie, 转义英文逗号 否则部分场景会出问题
-                    await File.WriteAllTextAsync(Path.Combine(Program.APP_DIR, "BBDown.data"), cc[(cc.IndexOf('?') + 1)..].Replace("&", ";").Replace(",", "%2C"));
+                    var cookiePath = Path.Combine(Program.APP_DIR, "BBDown.data");
+                    await File.WriteAllTextAsync(cookiePath, cc[(cc.IndexOf('?') + 1)..].Replace("&", ";").Replace(",", "%2C"));
+                    SetOwnerOnlyPermission(cookiePath);
                     File.Delete("qrcode.png");
                     break;
                 }
@@ -81,9 +83,9 @@ internal static class BBDownLoginUtil
         {
             string loginUrl = "https://passport.snm0516.aisee.tv/x/passport-tv-login/qrcode/auth_code";
             string pollUrl = "https://passport.bilibili.com/x/passport-tv-login/qrcode/poll";
-            var parms = GetTVLoginParms();
+            var parameters = GetTVLoginParms();
             Log("获取登录地址...");
-            byte[] responseArray = await (await HTTPUtil.AppHttpClient.PostAsync(loginUrl, new FormUrlEncodedContent(parms.ToDictionary()))).Content.ReadAsByteArrayAsync();
+            byte[] responseArray = await (await HTTPUtil.AppHttpClient.PostAsync(loginUrl, new FormUrlEncodedContent(parameters.ToDictionary()))).Content.ReadAsByteArrayAsync();
             string web = Encoding.UTF8.GetString(responseArray);
             string url = JsonDocument.Parse(web).RootElement.GetProperty("data").GetProperty("url").ToString();
             string authCode = JsonDocument.Parse(web).RootElement.GetProperty("data").GetProperty("auth_code").ToString();
@@ -95,14 +97,14 @@ internal static class BBDownLoginUtil
             Log("生成二维码成功: qrcode.png, 请打开并扫描, 或扫描打印的二维码");
             var consoleQRCode = new ConsoleQRCode(qrCodeData);
             consoleQRCode.GetGraphic();
-            parms.Set("auth_code", authCode);
-            parms.Set("ts", GetTimeStamp(true));
-            parms.Remove("sign");
-            parms.Add("sign", GetSign(ToQueryString(parms)));
+            parameters.Set("auth_code", authCode);
+            parameters.Set("ts", GetTimeStamp(true));
+            parameters.Remove("sign");
+            parameters.Add("sign", GetSign(ToQueryString(parameters)));
             while (true)
             {
                 await Task.Delay(1000);
-                responseArray = await (await HTTPUtil.AppHttpClient.PostAsync(pollUrl, new FormUrlEncodedContent(parms.ToDictionary()))).Content.ReadAsByteArrayAsync();
+                responseArray = await (await HTTPUtil.AppHttpClient.PostAsync(pollUrl, new FormUrlEncodedContent(parameters.ToDictionary()))).Content.ReadAsByteArrayAsync();
                 web = Encoding.UTF8.GetString(responseArray);
                 string code = JsonDocument.Parse(web).RootElement.GetProperty("code").ToString();
                 if (code == "86038")
@@ -119,12 +121,23 @@ internal static class BBDownLoginUtil
                     string cc = JsonDocument.Parse(web).RootElement.GetProperty("data").GetProperty("access_token").ToString();
                     Log("登录成功: AccessToken=" + cc);
                     //导出cookie
-                    await File.WriteAllTextAsync(Path.Combine(Program.APP_DIR, "BBDownTV.data"), "access_token=" + cc);
+                    var tvTokenPath = Path.Combine(Program.APP_DIR, "BBDownTV.data");
+                    await File.WriteAllTextAsync(tvTokenPath, "access_token=" + cc);
+                    SetOwnerOnlyPermission(tvTokenPath);
                     File.Delete("qrcode.png");
                     break;
                 }
             }
         }
         catch (Exception e) { LogError(e.Message); }
+    }
+
+    private static void SetOwnerOnlyPermission(string path)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            // Unix/macOS: chmod 600 (owner read/write only)
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 }

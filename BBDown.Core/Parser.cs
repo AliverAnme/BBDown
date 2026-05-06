@@ -13,10 +13,10 @@ public static partial class Parser
 {
     public static string WbiSign(string api)
     {
-        return $"{api}&w_rid=" + string.Concat(MD5.HashData(Encoding.UTF8.GetBytes(api + Config.WBI)).Select(i => i.ToString("x2")).ToArray());
+        return $"{api}&w_rid=" + Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(api + Config.WBI)));
     }
 
-    private static async Task<string> GetPlayJsonAsync(string encoding, string aidOri, string aid, string cid, string epId, bool tvApi, bool intl, bool appApi, string qn = "0")
+    private static async Task<string> GetPlayJsonAsync(string encoding, string aidOri, string aid, string cid, string epId, bool tvApi, bool intl, bool appApi, bool wantDrm, string qn = "0")
     {
         LogDebug("aid={0},cid={1},epId={2},tvApi={3},IntlApi={4},appApi={5},qn={6}", aid, cid, epId, tvApi, intl, appApi, qn);
 
@@ -52,8 +52,8 @@ public static partial class Parser
             if (Config.AREA != "") apiBuilder.Append($"&access_key={Config.TOKEN}&area={Config.AREA}");
             apiBuilder.Append($"&otype=json&qn={qn}");
             if (bangumi) apiBuilder.Append($"&module=bangumi&ep_id={epId}&session=");
-            if (Config.COOKIE == "" && !Config.WANT_DRM) apiBuilder.Append("&try_look=1");
-            if (Config.WANT_DRM) apiBuilder.Append("&drm_tech_type=2");
+            if (Config.COOKIE == "" && !wantDrm) apiBuilder.Append("&try_look=1");
+            if (wantDrm) apiBuilder.Append("&drm_tech_type=2");
             apiBuilder.Append($"&wts={GetTimeStamp(true)}");
             api = prefix + (bangumi ? apiBuilder.ToString() : WbiSign(apiBuilder.ToString()));
         }
@@ -94,92 +94,91 @@ public static partial class Parser
         return webJson;
     }
 
-    public static async Task<ParsedResult> ExtractTracksAsync(string aidOri, string aid, string cid, string epId, bool tvApi, bool intlApi, bool appApi, string encoding, string qn = "0")
+    public static async Task<ParsedResult> ExtractTracksAsync(string aidOri, string aid, string cid, string epId, bool tvApi, bool intlApi, bool appApi, string encoding, bool wantDrm = false, string qn = "0")
     {
-        var intlCode = "0";
         ParsedResult parsedResult = new();
 
         //调用解析
-        parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, qn);
+        parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, wantDrm, qn);
 
         LogDebug(parsedResult.WebJsonString);
 
-        startParsing:
-        var respJson = JsonDocument.Parse(parsedResult.WebJsonString);
-        var data = respJson.RootElement;
-
-        //intl接口
-        if (parsedResult.WebJsonString.Contains("\"stream_list\""))
+        //intl接口需要两次请求(code=0和code=1)
+        if (intlApi)
         {
-            int pDur = data.GetProperty("data").GetProperty("video_info").GetProperty("timelength").GetInt32() / 1000;
-            var audio = data.GetProperty("data").GetProperty("video_info").GetProperty("dash_audio").EnumerateArray().ToList();
-            foreach (var stream in data.GetProperty("data").GetProperty("video_info").GetProperty("stream_list").EnumerateArray())
+            foreach (var code in new[] { "0", "1" })
             {
-                if (stream.TryGetProperty("dash_video", out JsonElement dashVideo))
+                if (code == "1")
+                    parsedResult.WebJsonString = await GetPlayJsonAsync(aid, cid, epId, qn, code);
+
+                using var intlJson = JsonDocument.Parse(parsedResult.WebJsonString);
+                var streamList = intlJson.RootElement.GetProperty("data").GetProperty("video_info").GetProperty("stream_list");
+                int pDur = intlJson.RootElement.GetProperty("data").GetProperty("video_info").GetProperty("timelength").GetInt32() / 1000;
+                var audioElements = intlJson.RootElement.GetProperty("data").GetProperty("video_info").GetProperty("dash_audio").EnumerateArray().ToList();
+
+                foreach (var stream in streamList.EnumerateArray())
                 {
-                    if (dashVideo.GetProperty("base_url").ToString() != "")
+                    if (stream.TryGetProperty("dash_video", out JsonElement dashVideo))
                     {
-                        var videoId = stream.GetProperty("stream_info").GetProperty("quality").ToString();
-                        var urlList = new List<string>() { dashVideo.GetProperty("base_url").ToString() };
-                        urlList.AddRange(dashVideo.GetProperty("backup_url").EnumerateArray().Select(i => i.ToString()));
-                        Video v = new()
+                        if (dashVideo.GetProperty("base_url").ToString() != "")
                         {
-                            dur = pDur,
-                            id = videoId,
-                            dfn = Config.qualitys[videoId],
-                            bandwith = Convert.ToInt64(dashVideo.GetProperty("bandwidth").ToString()) / 1000,
-                            baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
-                            codecs = GetVideoCodec(dashVideo.GetProperty("codecid").ToString()),
-                            size = dashVideo.TryGetProperty("size", out var sizeNode) ? Convert.ToDouble(sizeNode.ToString()) : 0
-                        };
-                        if (!parsedResult.VideoTracks.Contains(v)) parsedResult.VideoTracks.Add(v);
+                            var videoId = stream.GetProperty("stream_info").GetProperty("quality").ToString();
+                            var urlList = new List<string>() { dashVideo.GetProperty("base_url").ToString() };
+                            urlList.AddRange(dashVideo.GetProperty("backup_url").EnumerateArray().Select(i => i.ToString()));
+                            Video v = new()
+                            {
+                                dur = pDur,
+                                id = videoId,
+                                dfn = Config.qualitys[videoId],
+                                bandwidth = Convert.ToInt64(dashVideo.GetProperty("bandwidth").ToString()) / 1000,
+                                baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
+                                codecs = GetVideoCodec(dashVideo.GetProperty("codecid").ToString()),
+                                size = dashVideo.TryGetProperty("size", out var sizeNode) ? Convert.ToDouble(sizeNode.ToString()) : 0
+                            };
+                            if (!parsedResult.VideoTracks.Contains(v)) parsedResult.VideoTracks.Add(v);
+                        }
                     }
                 }
-            }
 
-            foreach (var node in audio)
-            {
-                var urlList = new List<string>() { node.GetProperty("base_url").ToString() };
-                urlList.AddRange(node.GetProperty("backup_url").EnumerateArray().Select(i => i.ToString()));
-                Audio a = new()
+                foreach (var node in audioElements)
                 {
-                    id = node.GetProperty("id").ToString(),
-                    dfn = node.GetProperty("id").ToString(),
-                    dur = pDur,
-                    bandwith = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
-                    baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
-                    codecs = "M4A"
-                };
-                if (!parsedResult.AudioTracks.Contains(a)) parsedResult.AudioTracks.Add(a);
+                    var urlList = new List<string>() { node.GetProperty("base_url").ToString() };
+                    urlList.AddRange(node.GetProperty("backup_url").EnumerateArray().Select(i => i.ToString()));
+                    Audio a = new()
+                    {
+                        id = node.GetProperty("id").ToString(),
+                        dfn = node.GetProperty("id").ToString(),
+                        dur = pDur,
+                        bandwidth = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
+                        baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
+                        codecs = "M4A"
+                    };
+                    if (!parsedResult.AudioTracks.Contains(a)) parsedResult.AudioTracks.Add(a);
+                }
             }
-
-            if (intlCode == "0")
-            {
-                intlCode = "1";
-                parsedResult.WebJsonString = await GetPlayJsonAsync(aid, cid, epId, qn, intlCode);
-                goto startParsing;
-            }
-
             return parsedResult;
         }
-        // data节点一次性判断完
-        string? nodeName = null;
-        if (parsedResult.WebJsonString.Contains("\"result\":{"))
-        {
-            nodeName = "result";
 
-            // v2
-            if (parsedResult.WebJsonString.Contains("\"video_info\":{"))
-            {
-                nodeName = "video_info";
-            }
+        var respJson = JsonDocument.Parse(parsedResult.WebJsonString);
+        var data = respJson.RootElement;
+        // 根据API版本自动定位数据节点
+        JsonElement root;
+        if (data.TryGetProperty("result", out var resultElem))
+        {
+            root = resultElem.TryGetProperty("video_info", out var vi) ? vi : resultElem;
         }
-        else if (parsedResult.WebJsonString.Contains("\"data\":{")) nodeName = "data";
-        var root = nodeName == null ? data : nodeName == "video_info" ? data.GetProperty("result").GetProperty(nodeName) : data.GetProperty(nodeName);
+        else if (data.TryGetProperty("data", out var dataElem))
+        {
+            root = dataElem;
+        }
+        else
+        {
+            root = data;
+        }
 
         bool bangumi = aidOri.StartsWith("ep:");
 
-        if (parsedResult.WebJsonString.Contains("\"dash\":{")) //dash
+        if (root.TryGetProperty("dash", out _)) //dash
         {
             List<JsonElement>? audio = null;
             List<JsonElement>? video = null;
@@ -187,31 +186,45 @@ public static partial class Parser
             List<JsonElement>? roleAudio = null;
             int pDur = 0;
 
-            try { pDur = root.GetProperty("dash").GetProperty("duration").GetInt32(); } catch { }
-            try { pDur = root.GetProperty("timelength").GetInt32() / 1000; } catch { }
+            if (root.TryGetProperty("dash", out var dashElem) && dashElem.TryGetProperty("duration", out var durElem))
+                pDur = durElem.GetInt32();
+            else if (root.TryGetProperty("timelength", out var tlElem))
+                pDur = tlElem.GetInt32() / 1000;
 
             // DRM metadata
-            try { parsedResult.IsDrm = root.GetProperty("is_drm").GetBoolean(); } catch { }
-            try { parsedResult.DrmTechType = root.GetProperty("drm_tech_type").GetInt32(); } catch { }
-            try { parsedResult.DrmType = root.GetProperty("drm_type").GetString() ?? ""; } catch { }
+            if (root.TryGetProperty("is_drm", out var isDrmElem))
+                parsedResult.IsDrm = isDrmElem.GetBoolean();
+            if (root.TryGetProperty("drm_tech_type", out var techElem))
+                parsedResult.DrmTechType = techElem.GetInt32();
+            if (root.TryGetProperty("drm_type", out var typeElem))
+                parsedResult.DrmType = typeElem.GetString() ?? "";
             if (parsedResult.IsDrm) LogDebug("DRM detected: type={0}, tech={1}", parsedResult.DrmType, parsedResult.DrmTechType);
 
-            bool reParse = false;
-            reParse:
-            if (reParse)
+            //免二压视频需要重新请求
+            for (int reparsePass = 0; reparsePass < 2; reparsePass++)
             {
-                parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, GetMaxQn());
+            if (reparsePass == 1)
+            {
+                if (appApi) break; //只有非APP接口需要免二压
+                parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, wantDrm, GetMaxQn());
+                respJson.Dispose();
                 respJson = JsonDocument.Parse(parsedResult.WebJsonString);
-                data = respJson.RootElement;
-                root = nodeName == null ? data : nodeName == "video_info" ? data.GetProperty("result").GetProperty(nodeName) : data.GetProperty(nodeName);
+                var newRoot = respJson.RootElement;
+                root = newRoot.TryGetProperty("result", out var rr) && rr.TryGetProperty("video_info", out var vvii) ? vvii :
+                       newRoot.TryGetProperty("result", out var rr2) ? rr2 :
+                       newRoot.TryGetProperty("data", out var dd) ? dd : newRoot;
             }
-            try { video = root.GetProperty("dash").GetProperty("video").EnumerateArray().ToList(); } catch { }
-            try { audio = root.GetProperty("dash").GetProperty("audio").EnumerateArray().ToList(); } catch { }
+            if (root.TryGetProperty("dash", out var dash) && dash.TryGetProperty("video", out var vidArr))
+                video = vidArr.EnumerateArray().ToList();
+            if (root.TryGetProperty("dash", out dash) && dash.TryGetProperty("audio", out var audArr))
+                audio = audArr.EnumerateArray().ToList();
 
             if (appApi && bangumi)
             {
-                try { backgroundAudio = data.GetProperty("dubbing_info").GetProperty("background_audio").EnumerateArray().ToList(); } catch { }
-                try { roleAudio = data.GetProperty("dubbing_info").GetProperty("role_audio_list").EnumerateArray().ToList(); } catch { }
+                if (data.TryGetProperty("dubbing_info", out var dub) && dub.TryGetProperty("background_audio", out var bgArr))
+                    backgroundAudio = bgArr.EnumerateArray().ToList();
+                if (data.TryGetProperty("dubbing_info", out dub) && dub.TryGetProperty("role_audio_list", out var roleArr))
+                    roleAudio = roleArr.EnumerateArray().ToList();
             }
             //处理杜比音频
             try
@@ -227,7 +240,7 @@ public static partial class Parser
                     }
                 }
             }
-            catch (Exception) {; }
+            catch (Exception) { /* non-critical metadata, ignore */ }
 
             //处理Hi-Res无损
             try
@@ -244,7 +257,7 @@ public static partial class Parser
                     }
                 }
             }
-            catch (Exception) {; }
+            catch (Exception) { /* non-critical metadata, ignore */ }
 
             if (video != null)
             {
@@ -261,7 +274,7 @@ public static partial class Parser
                         dur = pDur,
                         id = videoId,
                         dfn = Config.qualitys[videoId],
-                        bandwith = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
+                        bandwidth = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
                         baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
                         codecs = GetVideoCodec(node.GetProperty("codecid").ToString()),
                         size = node.TryGetProperty("size", out var sizeNode) ? Convert.ToDouble(sizeNode.ToString()) : 0
@@ -289,16 +302,11 @@ public static partial class Parser
                         if (firstVideo.TryGetProperty("widevine_pssh", out var pssh) && pssh.GetString() is string ps && ps.Length > 0)
                             parsedResult.PsshBase64 = ps;
                     }
-                    catch { }
+                    catch (Exception ex) { LogDebug("DRM license info extraction error: {0}", ex.Message); }
                 }
             }
 
-            //此处处理免二压视频，需要单独再请求一次
-            if (!reParse && !appApi)
-            {
-                reParse = true;
-                goto reParse;
-            }
+            } // end for reparsePass
 
             if (audio != null)
             {
@@ -325,7 +333,7 @@ public static partial class Parser
                         id = audioId,
                         dfn = audioId,
                         dur = pDur,
-                        bandwith = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
+                        bandwidth = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
                         baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
                         codecs = codecs
                     });
@@ -344,7 +352,7 @@ public static partial class Parser
                         id = audioId,
                         dfn = audioId,
                         dur = pDur,
-                        bandwith = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
+                        bandwidth = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
                         baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
                         codecs = node.GetProperty("codecs").ToString()
                     });
@@ -363,7 +371,7 @@ public static partial class Parser
                             id = audioId,
                             dfn = audioId,
                             dur = pDur,
-                            bandwith = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
+                            bandwidth = Convert.ToInt64(node.GetProperty("bandwidth").ToString()) / 1000,
                             baseUrl = urlList.FirstOrDefault(i => !BaseUrlRegex().IsMatch(i), urlList.First()),
                             codecs = node.GetProperty("codecs").ToString()
                         });
@@ -378,12 +386,16 @@ public static partial class Parser
                 }
             }
         }
-        else if (parsedResult.WebJsonString.Contains("\"durl\":[")) //flv
+        else if (root.TryGetProperty("durl", out _)) //flv
         {
             //默认以最高清晰度解析
-            parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, GetMaxQn());
-            data = JsonDocument.Parse(parsedResult.WebJsonString).RootElement;
-            root = nodeName == null ? data : nodeName == "video_info" ? data.GetProperty("result").GetProperty(nodeName) : data.GetProperty(nodeName);
+            parsedResult.WebJsonString = await GetPlayJsonAsync(encoding, aidOri, aid, cid, epId, tvApi, intlApi, appApi, wantDrm, GetMaxQn());
+            using var newDoc = JsonDocument.Parse(parsedResult.WebJsonString);
+            var newData = newDoc.RootElement;
+            if (newData.TryGetProperty("result", out var r))
+                root = r.TryGetProperty("video_info", out var vi) ? vi : r;
+            else if (newData.TryGetProperty("data", out var d))
+                root = d;
             string quality = "";
             string videoCodecid = "";
             string url = "";
@@ -471,7 +483,7 @@ public static partial class Parser
 
     private static string GetMaxQn()
     {
-        return Config.qualitys.Keys.First();
+        return Config.qualitys.Keys.Select(int.Parse).Max().ToString();
     }
 
     private static string GetTimeStamp(bool bflag)
@@ -480,10 +492,10 @@ public static partial class Parser
         return bflag ? ts.ToUnixTimeSeconds().ToString() : ts.ToUnixTimeMilliseconds().ToString();
     }
 
-    private static string GetSign(string parms, bool isBiliPlus)
+    private static string GetSign(string parameters, bool isBiliPlus)
     {
-        string toEncode = parms + (isBiliPlus ? "acd495b248ec528c2eed1e862d393126" : "59b43e04ad6965f34319062b478f83dd");
-        return string.Concat(MD5.HashData(Encoding.UTF8.GetBytes(toEncode)).Select(i => i.ToString("x2")).ToArray());
+        string toEncode = parameters + (isBiliPlus ? "acd495b248ec528c2eed1e862d393126" : "59b43e04ad6965f34319062b478f83dd");
+        return Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(toEncode)));
     }
 
     [GeneratedRegex("window.__playinfo__=([\\s\\S]*?)<\\/script>")]

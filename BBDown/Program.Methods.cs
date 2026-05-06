@@ -22,7 +22,7 @@ internal partial class Program
     /// <param name="myOption"></param>
     private static void HandleDeprecatedOptions(MyOption myOption)
     {
-        if (myOption.AddDfnSubfix)
+        if (myOption.AddDfnSuffix)
         {
             LogWarn("--add-dfn-subfix 已被弃用, 建议使用 --file-pattern/-F 或 --multi-file-pattern/-M 来自定义输出文件名格式");
             if (string.IsNullOrEmpty(myOption.FilePattern) && string.IsNullOrEmpty(myOption.MultiFilePattern))
@@ -61,7 +61,7 @@ internal partial class Program
                 LogWarn($"已切换至 -M \"{MultiPageDefaultSavePath}\"");
             }
         }
-        if (myOption.BandwithAscending)
+        if (myOption.BandwidthAscending)
         {
             LogWarn("--bandwith-ascending 已被弃用, 建议使用 --video-ascending 与 --audio-ascending 来指定视频或音频是否升序, 本次执行已将视频与音频均设为升序");
             myOption.VideoAscending = true;
@@ -418,14 +418,14 @@ internal partial class Program
             foreach (var a in parsedResult.BackgroundAudioTracks)
             {
                 int pDur = pageDur == 0 ? a.dur : pageDur;
-                LogColor($"{index++}. [{a.codecs}] [{a.bandwith} kbps] [~{FormatFileSize(pDur * a.bandwith * 1024 / 8)}]", false);
+                LogColor($"{index++}. [{a.codecs}] [{a.bandwidth} kbps] [~{FormatFileSize(pDur * a.bandwidth * 1024 / 8)}]", false);
             }
             Log($"共计{parsedResult.RoleAudioList.Count}条配音, 每条包含{parsedResult.RoleAudioList[0].audio.Count}条配音流.");
             index = 0;
             foreach (var a in parsedResult.RoleAudioList[0].audio)
             {
                 int pDur = pageDur == 0 ? a.dur : pageDur;
-                LogColor($"{index++}. [{a.codecs}] [{a.bandwith} kbps] [~{FormatFileSize(pDur * a.bandwith * 1024 / 8)}]", false);
+                LogColor($"{index++}. [{a.codecs}] [{a.bandwidth} kbps] [~{FormatFileSize(pDur * a.bandwidth * 1024 / 8)}]", false);
             }
         }
         //展示所有的音视频流信息
@@ -436,8 +436,8 @@ internal partial class Program
             foreach (var v in parsedResult.VideoTracks)
             {
                 int pDur = pageDur == 0 ? v.dur : pageDur;
-                var size = v.size > 0 ? v.size : pDur * v.bandwith * 1024 / 8;
-                LogColor($"{index++}. [{v.dfn}] [{v.res}] [{v.codecs}] [{v.fps}] [{v.bandwith} kbps] [~{FormatFileSize(size)}]".Replace("[] ", ""), false);
+                var size = v.size > 0 ? v.size : pDur * v.bandwidth * 1024 / 8;
+                LogColor($"{index++}. [{v.dfn}] [{v.res}] [{v.codecs}] [{v.fps}] [{v.bandwidth} kbps] [~{FormatFileSize(size)}]".Replace("[] ", ""), false);
                 if (onlyShowInfo) Console.WriteLine(v.baseUrl);
             }
         }
@@ -448,7 +448,7 @@ internal partial class Program
             foreach (var a in parsedResult.AudioTracks)
             {
                 int pDur = pageDur == 0 ? a.dur : pageDur;
-                LogColor($"{index++}. [{a.codecs}] [{a.bandwith} kbps] [~{FormatFileSize(pDur * a.bandwith * 1024 / 8)}]", false);
+                LogColor($"{index++}. [{a.codecs}] [{a.bandwidth} kbps] [~{FormatFileSize(pDur * a.bandwidth * 1024 / 8)}]", false);
                 if (onlyShowInfo) Console.WriteLine(a.baseUrl);
             }
         }
@@ -459,13 +459,13 @@ internal partial class Program
         if (selectedVideo != null)
         {
             int pDur = pageDur == 0 ? selectedVideo.dur : pageDur;
-            var size = selectedVideo.size > 0 ? selectedVideo.size : pDur * selectedVideo.bandwith * 1024 / 8;
-            LogColor($"[视频] [{selectedVideo.dfn}] [{selectedVideo.res}] [{selectedVideo.codecs}] [{selectedVideo.fps}] [{selectedVideo.bandwith} kbps] [~{FormatFileSize(size)}]".Replace("[] ", ""), false);
+            var size = selectedVideo.size > 0 ? selectedVideo.size : pDur * selectedVideo.bandwidth * 1024 / 8;
+            LogColor($"[视频] [{selectedVideo.dfn}] [{selectedVideo.res}] [{selectedVideo.codecs}] [{selectedVideo.fps}] [{selectedVideo.bandwidth} kbps] [~{FormatFileSize(size)}]".Replace("[] ", ""), false);
         }
         if (selectedAudio != null)
         {
             int pDur = pageDur == 0 ? selectedAudio.dur : pageDur;
-            LogColor($"[音频] [{selectedAudio.codecs}] [{selectedAudio.bandwith} kbps] [~{FormatFileSize(pDur * selectedAudio.bandwith * 1024 / 8)}]", false);
+            LogColor($"[音频] [{selectedAudio.codecs}] [{selectedAudio.bandwidth} kbps] [~{FormatFileSize(pDur * selectedAudio.bandwidth * 1024 / 8)}]", false);
         }
     }
 
@@ -475,13 +475,20 @@ internal partial class Program
     /// <param name="parsedResult"></param>
     /// <param name="vIndex"></param>
     /// <param name="aIndex"></param>
+    private static int ReadIntSafe()
+    {
+        if (!int.TryParse(Console.ReadLine(), out var val))
+            return 0;
+        return val;
+    }
+
     private static void SelectTrackManually(ParsedResult parsedResult, ref int vIndex, ref int aIndex)
     {
         if (parsedResult.VideoTracks.Any())
         {
             Log("请选择一条视频流(输入序号): ", false);
             Console.ForegroundColor = ConsoleColor.Cyan;
-            vIndex = Convert.ToInt32(Console.ReadLine());
+            vIndex = ReadIntSafe();
             if (vIndex > parsedResult.VideoTracks.Count || vIndex < 0) vIndex = 0;
             Console.ResetColor();
         }
@@ -489,7 +496,7 @@ internal partial class Program
         {
             Log("请选择一条音频流(输入序号): ", false);
             Console.ForegroundColor = ConsoleColor.Cyan;
-            aIndex = Convert.ToInt32(Console.ReadLine());
+            aIndex = ReadIntSafe();
             if (aIndex > parsedResult.AudioTracks.Count || aIndex < 0) aIndex = 0;
             Console.ResetColor();
         }
@@ -520,9 +527,9 @@ internal partial class Program
         }
     }
 
-    [GeneratedRegex("://.*:\\d+/")]
+    [GeneratedRegex("://[^/]+:\\d+/")]
     private static partial Regex PcdnRegex();
-    [GeneratedRegex("://.*akamaized\\.net/")]
+    [GeneratedRegex("://[^/]*akamaized\\.net/")]
     private static partial Regex AkamRegex();
     [GeneratedRegex("://[^/]+/")]
     private static partial Regex UposRegex();

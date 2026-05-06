@@ -15,8 +15,10 @@ internal static class BBDownConfigParser
         try
         {
             var configPath = newArgsList.Contains("--config-file")
-                ? newArgsList.ElementAt(newArgsList.IndexOf("--config-file") + 1)
-                : Path.Combine(Program.APP_DIR, "BBDown.config");
+                ? newArgsList.ElementAtOrDefault(newArgsList.IndexOf("--config-file") + 1)
+                : null;
+            if (string.IsNullOrEmpty(configPath))
+                configPath = Path.Combine(Program.APP_DIR, "BBDown.config");
             if (File.Exists(configPath))
             {
                 Log($"加载配置文件: {configPath}");
@@ -36,6 +38,11 @@ internal static class BBDownConfigParser
                         }
                     );
                 var configArgsResult = rootCommand.Parse(configArgs.ToArray());
+                if (configArgsResult.Errors.Any())
+                {
+                    var errMsg = string.Join("; ", configArgsResult.Errors.Select(e => e.Message));
+                    LogWarn($"配置文件解析警告: {errMsg}");
+                }
                 foreach (var item in configArgsResult.CommandResult.Children)
                 {
                     if (item is OptionResult o)

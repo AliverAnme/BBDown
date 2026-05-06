@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Text;
 using System.Threading;
 
@@ -75,10 +75,11 @@ class ProgressBar : IDisposable, IProgress<double>
 				var delta = downloadedBytes - lastDownloadedBytes;
 				speedString = " - " + BBDownUtil.FormatFileSize(delta) + "/s";
 				lastDownloadedBytes = downloadedBytes;
-				if (RelatedTask is not null) 
+				var task = RelatedTask;
+				if (task is not null)
 				{
-					RelatedTask.DownloadSpeed = delta;
-					RelatedTask.TotalDownloadedBytes += delta;
+					task.DownloadSpeed = delta;
+					task.TotalDownloadedBytes += delta;
 				}
 			}
 
@@ -99,7 +100,7 @@ class ProgressBar : IDisposable, IProgress<double>
 				animation[animationIndex++ % animation.Length],
 				speedString);
 			UpdateText(text);
-			if (RelatedTask is not null) 
+			if (RelatedTask is not null)
 			{
 				RelatedTask.Progress = currentProgress;
 			}

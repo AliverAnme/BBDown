@@ -66,8 +66,6 @@ partial class Program
     public static async Task<int> Main(params string[] args)
     {
         Console.CancelKeyPress += Console_CancelKeyPress;
-        ServicePointManager.DefaultConnectionLimit = 2048;
-
         var rootCommand = CommandLineInvoker.GetRootCommand(RunApp);
         Command loginCommand = new(
             "login",
@@ -210,8 +208,9 @@ partial class Program
         string savePathFormat = myOption.FilePattern;
         string lang = myOption.Language;
         string aidOri = ""; //原始aid
-        int delay = Convert.ToInt32(myOption.DelayPerPage);
+        int delay = myOption.DelayPerPage;
         Config.DEBUG_LOG = myOption.Debug;
+        Config.SKIP_SSL_CHECK = myOption.Insecure;
         Config.HOST = myOption.Host;
         Config.EPHOST = myOption.EpHost;
         Config.TVHOST = myOption.TvHost;
@@ -220,7 +219,16 @@ partial class Program
         Config.TOKEN = myOption.AccessToken.Replace("access_token=", "");
 
         LogDebug("AppDirectory: {0}", APP_DIR);
-        LogDebug("运行参数：{0}", JsonSerializer.Serialize(myOption, MyOptionJsonContext.Default.MyOption));
+        if (Config.DEBUG_LOG)
+        {
+            var savedCookie = myOption.Cookie;
+            var savedToken = myOption.AccessToken;
+            myOption.Cookie = string.IsNullOrEmpty(savedCookie) ? "" : "***";
+            myOption.AccessToken = string.IsNullOrEmpty(savedToken) ? "" : "***";
+            LogDebug("运行参数：{0}", JsonSerializer.Serialize(myOption, MyOptionJsonContext.Default.MyOption));
+            myOption.Cookie = savedCookie;
+            myOption.AccessToken = savedToken;
+        }
         return (encodingPriority, dfnPriority, firstEncoding, downloadDanmaku, downloadDanmakuFormats, input, savePathFormat, lang, aidOri, delay);
     }
 
@@ -235,7 +243,11 @@ partial class Program
             Log("检测账号登录...");
             if (!await CheckLogin(Config.COOKIE))
             {
-                LogWarn("你尚未登录B站账号, 解析可能受到限制");
+                LogWarn("========================================");
+                LogWarn("  你尚未登录B站账号！");
+                LogWarn("  未登录状态下仅能下载6分钟试看片段。");
+                LogWarn("  请运行 BBDown login 扫码登录以获取完整视频。");
+                LogWarn("========================================");
             }
         }
 
@@ -257,9 +269,9 @@ partial class Program
         {
             vInfo = await fetcher.FetchAsync(aidOri);
         }
-        catch (KeyNotFoundException e)
+        catch (Exception e) when (e is KeyNotFoundException or InvalidOperationException)
         {
-            if (e.Message != "Arg_KeyNotFound") throw; // 错误消息不符合预期，抛出异常
+            // B站返回非番剧JSON结构（可能是课程），尝试按课程查找
             if (aidOri.StartsWith("cheese:")) throw; // 已经按课程查找过，不再重复尝试
 
             LogWarn("未找到此 EP/SS 对应番剧信息, 正在尝试按课程查找。");
@@ -392,7 +404,8 @@ partial class Program
         long pubTime = vInfo.PubTime;
         bool selected = false; //用户是否已经手动选择过了轨道
         int retryCount = 0;
-        downloadPage:
+        while (retryCount < 3)
+        {
         try
         {
             LogDebug("尝试获取章节信息...");
@@ -455,8 +468,7 @@ partial class Program
             }
 
             //调用解析
-            Config.WANT_DRM = myOption.DecryptDrm;
-            ParsedResult parsedResult = await ExtractTracksAsync(aidOri, p.aid, p.cid, p.epid, myOption.UseTvApi, myOption.UseIntlApi, myOption.UseAppApi, firstEncoding);
+            ParsedResult parsedResult = await ExtractTracksAsync(aidOri, p.aid, p.cid, p.epid, myOption.UseTvApi, myOption.UseIntlApi, myOption.UseAppApi, firstEncoding!, myOption.DecryptDrm);
             List<AudioMaterial> audioMaterial = [];
             if (!p.points.Any())
             {
@@ -465,7 +477,12 @@ partial class Program
 
             if (Config.DEBUG_LOG)
             {
-                File.WriteAllText($"debug_{DateTime.Now:yyyyMMddHHmmssfff}.json", parsedResult.WebJsonString);
+                var debugFile = $"debug_{DateTime.Now:yyyyMMddHHmmssfff}.json";
+                File.WriteAllText(debugFile, parsedResult.WebJsonString);
+                // 限制 debug 文件数量，保留最近 20 个
+                var debugFiles = Directory.GetFiles(".", "debug_*.json").Order().ToArray();
+                for (int i = 0; i < debugFiles.Length - 20; i++)
+                    File.Delete(debugFiles[i]);
             }
 
             var savePath = "";
@@ -698,31 +715,27 @@ partial class Program
                     LogError($"请先运行: BBDown login  或使用 --cookie 参数");
                     return;
                 }
-                bool flag = false;
                 var clips = parsedResult.Clips;
                 var dfns = parsedResult.Dfns;
-                reParse:
-                //排序
-                parsedResult.VideoTracks = SortTracks(parsedResult.VideoTracks, dfnPriority, encodingPriority, myOption.VideoAscending);
 
                 int vIndex = 0;
-                if (myOption.Interactive && !flag && !selected)
+                if (myOption.Interactive && !selected)
                 {
                     int i = 0;
                     dfns.ForEach(key => LogColor($"{i++}.{Config.qualitys[key]}"));
                     Log("请选择最想要的清晰度(输入序号): ", false);
                     Console.ForegroundColor = ConsoleColor.Cyan;
-                    vIndex = Convert.ToInt32(Console.ReadLine());
+                    vIndex = ReadIntSafe();
                     if (vIndex > dfns.Count || vIndex < 0) vIndex = 0;
                     Console.ResetColor();
                     //重新解析
-                    parsedResult.VideoTracks.Clear();
-                    parsedResult = await ExtractTracksAsync(aidOri, p.aid, p.cid, p.epid, myOption.UseTvApi, myOption.UseIntlApi, myOption.UseAppApi, firstEncoding, dfns[vIndex]);
+                    parsedResult = await ExtractTracksAsync(aidOri, p.aid, p.cid, p.epid, myOption.UseTvApi, myOption.UseIntlApi, myOption.UseAppApi, firstEncoding!, myOption.DecryptDrm, dfns[vIndex]);
                     if (!p.points.Any()) p.points = parsedResult.ExtraPoints;
-                    flag = true;
                     selected = true;
-                    goto reParse;
+                    vIndex = 0; // 重新解析后第一个轨道即为所选清晰度
                 }
+                //排序
+                parsedResult.VideoTracks = SortTracks(parsedResult.VideoTracks, dfnPriority, encodingPriority, myOption.VideoAscending);
 
                 Log($"共计{parsedResult.VideoTracks.Count}条流(共有{clips.Count}个分段).");
                 int index = 0;
@@ -806,14 +819,16 @@ partial class Program
             if (!string.IsNullOrWhiteSpace(savePath)) {
                 relatedTask?.SavePaths.Add(savePath);
             }
+            break; // success, exit retry loop
         }
         catch (Exception ex)
         {
-            if (++retryCount > 2) throw;
+            retryCount++;
+            if (retryCount >= 3) throw;
             LogError(ex.Message);
             LogWarn("下载出现异常, 3秒后将进行自动重试...");
             await Task.Delay(3000);
-            goto downloadPage;
+        }
         }
     }
 
@@ -835,34 +850,26 @@ partial class Program
             Console.Write($"{msg}{Environment.NewLine}请尝试升级到最新版本后重试!");
             Console.ResetColor();
             Console.WriteLine();
-            Thread.Sleep(1);
-            Environment.Exit(1);
+            Environment.ExitCode = 1;
         }
     }
 
     private static List<Video> SortTracks(List<Video> videoTracks, Dictionary<string, int> dfnPriority, Dictionary<string, byte> encodingPriority, bool videoAscending)
     {
-        //用户同时输入了自定义分辨率优先级和自定义编码优先级, 则根据输入顺序依次进行排序
-        return dfnPriority.Any() && encodingPriority.Any() && Environment.CommandLine.IndexOf("--encoding-priority", StringComparison.Ordinal) < Environment.CommandLine.IndexOf("--dfn-priority")
-            ? videoTracks
-                .OrderBy(v => encodingPriority.GetValueOrDefault(v.codecs, (byte)100))
-                .ThenBy(v => dfnPriority.GetValueOrDefault(v.dfn, 100))
-                .ThenByDescending(v => Convert.ToInt32(v.id))
-                .ThenBy(v => videoAscending ? v.bandwith : -v.bandwith)
-                .ToList()
-            : videoTracks
-                .OrderBy(v => dfnPriority.GetValueOrDefault(v.dfn, 100))
-                .ThenBy(v => encodingPriority.GetValueOrDefault(v.codecs, (byte)100))
-                .ThenByDescending(v => Convert.ToInt32(v.id))
-                .ThenBy(v => videoAscending ? v.bandwith : -v.bandwith)
-                .ToList();
+        // 编码优先：先按编码排序，再按清晰度排序；清晰度优先时使用 --dfn-priority 即可
+        return videoTracks
+            .OrderBy(v => encodingPriority.GetValueOrDefault(v.codecs, (byte)100))
+            .ThenBy(v => dfnPriority.GetValueOrDefault(v.dfn, 100))
+            .ThenByDescending(v => Convert.ToInt32(v.id))
+            .ThenBy(v => videoAscending ? v.bandwidth : -v.bandwidth)
+            .ToList();
     }
     
     private static List<Audio> SortTracks(List<Audio> audioTracks, Dictionary<string, byte> encodingPriority, bool audioAscending)
     {
         return audioTracks
             .OrderBy(a => encodingPriority.GetValueOrDefault(a.shortCodecs, (byte)100))
-            .ThenBy(a => audioAscending ? a.bandwith : -a.bandwith)
+            .ThenBy(a => audioAscending ? a.bandwidth : -a.bandwidth)
             .ToList();
     }
 
@@ -902,9 +909,9 @@ partial class Program
                 "res" => videoTrack == null ? "" : videoTrack.res,
                 "fps" => videoTrack == null ? "" : videoTrack.fps,
                 "videoCodecs" => videoTrack == null ? "" : videoTrack.codecs,
-                "videoBandwidth" => videoTrack == null ? "" : videoTrack.bandwith.ToString(),
+                "videoBandwidth" => videoTrack == null ? "" : videoTrack.bandwidth.ToString(),
                 "audioCodecs" => audioTrack == null ? "" : audioTrack.codecs,
-                "audioBandwidth" => audioTrack == null ? "" : audioTrack.bandwith.ToString(),
+                "audioBandwidth" => audioTrack == null ? "" : audioTrack.bandwidth.ToString(),
                 "publishDate" => FormatTimeStamp(pubTime, defaultDateFormat),
                 "videoDate" => FormatTimeStamp(p.pubTime, defaultDateFormat),
                 "apiType" => apiType,

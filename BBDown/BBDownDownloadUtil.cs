@@ -91,17 +91,19 @@ internal static class BBDownDownloadUtil
         }
         int retry = 0;
         string tmpName = Path.Combine(desDir, Path.GetFileNameWithoutExtension(path) + ".tmp");
-        reDown:
+        while (retry < 3)
+        {
         try
         {
             using var progress = new ProgressBar(config.RelatedTask);
             await RangeDownloadToTmpAsync(0, url, tmpName, 0, null, (_, downloaded, total) => progress.Report((double)downloaded / total, downloaded));
             File.Move(tmpName, path, true);
+            break;
         }
         catch (Exception)
         {
             if (++retry == 3) throw;
-            goto reDown;
+        }
         }
     }
 
@@ -137,7 +139,8 @@ internal static class BBDownDownloadUtil
         {
             int retry = 0;
             string tmp = Path.Combine(Path.GetDirectoryName(path)!, clip.index.ToString("00000") + "_" + Path.GetFileNameWithoutExtension(path) + (Path.GetExtension(path).EndsWith(".mp4") ? ".vclip" : ".aclip"));
-            reDown:
+            while (retry < 3)
+            {
             try
             {
                 await RangeDownloadToTmpAsync(clip.index, url, tmp, clip.from, clip.to == -1 ? null : clip.to, (index, downloaded, _) =>
@@ -145,16 +148,16 @@ internal static class BBDownDownloadUtil
                     clipProgress[index] = downloaded;
                     progress.Report((double)clipProgress.Values.Sum() / fileSize, clipProgress.Values.Sum());
                 }, true);
+                break;
             }
             catch (NotSupportedException)
             {
-                if (++retry == 3) throw new Exception($"服务器可能并不支持多线程下载, 请使用 --multi-thread false 关闭多线程");
-                goto reDown;
+                if (++retry == 3) throw new Exception("服务器可能并不支持多线程下载, 请使用 --multi-thread false 关闭多线程");
             }
             catch (Exception)
             {
                 if (++retry == 3) throw new Exception($"Failed to download clip {clip.index}");
-                goto reDown;
+            }
             }
         });
     }
@@ -165,30 +168,20 @@ internal static class BBDownDownloadUtil
         List<Clip> clips = [];
         int index = 0;
         long counter = 0;
-        int perSize = 20 * 1024 * 1024;
+        long perSize = 20L * 1024 * 1024;
         while (fileSize > 0)
         {
+            long segmentSize = Math.Min(perSize, fileSize);
             Clip c = new()
             {
                 index = index,
                 from = counter,
-                to = counter + perSize
+                to = fileSize > perSize ? counter + segmentSize - 1 : -1
             };
-            //没到最后
-            if (fileSize - perSize > 0)
-            {
-                fileSize -= perSize;
-                counter += perSize + 1;
-                index++;
-                clips.Add(c);
-            }
-            //已到最后
-            else
-            {
-                c.to = -1;
-                clips.Add(c);
-                break;
-            }
+            clips.Add(c);
+            fileSize -= segmentSize;
+            counter += segmentSize;
+            index++;
         }
         return clips;
     }

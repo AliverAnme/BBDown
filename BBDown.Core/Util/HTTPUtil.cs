@@ -7,29 +7,43 @@ namespace BBDown.Core.Util;
 public static class HTTPUtil
 {
 
-    public static readonly HttpClient AppHttpClient = new(new HttpClientHandler
+    private static HttpClient CreateAppHttpClient()
     {
-        AllowAutoRedirect = true,
-        AutomaticDecompression = DecompressionMethods.All,
-        ServerCertificateCustomValidationCallback = (sender, cert, chain, sslPolicyErrors) => true
-    })
-    {
-        Timeout = TimeSpan.FromMinutes(2)
-    };
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            AutomaticDecompression = DecompressionMethods.All,
+        };
+        if (Config.SKIP_SSL_CHECK)
+        {
+            handler.ServerCertificateCustomValidationCallback = (_, _, _, _) => true;
+            LogDebug("SSL 证书验证已禁用");
+        }
+        return new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(2) };
+    }
 
-    private static readonly Random random = new Random();
+    private static HttpClient? _appHttpClient;
+    public static HttpClient AppHttpClient
+    {
+        get
+        {
+            _appHttpClient ??= CreateAppHttpClient();
+            return _appHttpClient;
+        }
+    }
+
     private static readonly string[] platforms = { "Windows NT 10.0; Win64", "Macintosh; Intel Mac OS X 10_15", "X11; Linux x86_64" };
 
     private static string RandomVersion(int min, int max)
     {
-        double version = random.NextDouble() * (max - min) + min;
+        double version = Random.Shared.NextDouble() * (max - min) + min;
         return version.ToString("F3");
     }
 
     private static string GetRandomUserAgent()
     {
         string[] browsers = { $"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{RandomVersion(80, 110)} Safari/537.36", $"Gecko/20100101 Firefox/{RandomVersion(80, 110)}" };
-        return $"Mozilla/5.0 ({platforms[random.Next(platforms.Length)]}) {browsers[random.Next(browsers.Length)]}";
+        return $"Mozilla/5.0 ({platforms[Random.Shared.Next(platforms.Length)]}) {browsers[Random.Shared.Next(browsers.Length)]}";
     }
 
     public static string UserAgent { get; set; } = GetRandomUserAgent();
@@ -58,17 +72,30 @@ public static class HTTPUtil
     // 重写重定向处理, 自动跟随多次重定向
     public static async Task<string> GetWebLocationAsync(string url)
     {
-        using var webRequest = new HttpRequestMessage(HttpMethod.Head, url);
-        webRequest.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
-        webRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate");
-        webRequest.Headers.CacheControl = CacheControlHeaderValue.Parse("no-cache");
-        webRequest.Headers.Connection.Clear();
+        // 先尝试 HEAD，部分服务器不支持则 fallback 到 GET
+        foreach (var method in new[] { HttpMethod.Head, HttpMethod.Get })
+        {
+            try
+            {
+                using var webRequest = new HttpRequestMessage(method, url);
+                webRequest.Headers.TryAddWithoutValidation("User-Agent", UserAgent);
+                webRequest.Headers.TryAddWithoutValidation("Accept-Encoding", "gzip, deflate");
+                webRequest.Headers.CacheControl = CacheControlHeaderValue.Parse("no-cache");
+                webRequest.Headers.Connection.Clear();
 
-        LogDebug("获取网页重定向地址: Url: {0}, Headers: {1}", url, webRequest.Headers);
-        var webResponse = (await AppHttpClient.SendAsync(webRequest, HttpCompletionOption.ResponseHeadersRead)).EnsureSuccessStatusCode();
-        string location = webResponse.RequestMessage.RequestUri.AbsoluteUri;
-        LogDebug("Location: {0}", location);
-        return location;
+                LogDebug("获取网页重定向地址(method={1}): Url: {0}", url, method);
+                var webResponse = (await AppHttpClient.SendAsync(webRequest, HttpCompletionOption.ResponseHeadersRead)).EnsureSuccessStatusCode();
+                string location = webResponse.RequestMessage?.RequestUri?.AbsoluteUri ?? url;
+                LogDebug("Location: {0}", location);
+                return location;
+            }
+            catch (HttpRequestException) when (method == HttpMethod.Head)
+            {
+                // HEAD 不被支持，回退到 GET
+                LogDebug("HEAD 请求失败，尝试 GET");
+            }
+        }
+        return url; // fallback: return original URL
     }
 
     public static async Task<byte[]> GetPostResponseAsync(string Url, byte[] postData, Dictionary<string, string>? headers = null)

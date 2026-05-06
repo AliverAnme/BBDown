@@ -30,6 +30,7 @@ internal static class CommandLineInvoker
     private static readonly Option<bool> CoverOnly = new(["--cover-only"], "仅下载封面");
     private static readonly Option<bool> SubOnly = new(["--sub-only"], "仅下载字幕");
     private static readonly Option<bool> Debug = new(["--debug"], "输出调试日志");
+    private static readonly Option<bool> Insecure = new(["--insecure"], "跳过SSL证书验证(仅用于抓包/代理场景)");
     private static readonly Option<bool> SkipMux = new(["--skip-mux"], "跳过混流步骤");
     private static readonly Option<bool> DecryptDrm = new(["--decrypt-drm", "-drm"], "尝试解密的DRM保护视频");
     private static readonly Option<string> DrmKey = new(["--key"], "DRM解密密钥 (hex)");
@@ -56,7 +57,7 @@ internal static class CommandLineInvoker
     private static readonly Option<string> UposHost = new(["--upos-host"], "自定义upos服务器");
     private static readonly Option<bool> ForceReplaceHost = new(["--force-replace-host"], "强制替换下载服务器host(默认开启)");
     private static readonly Option<bool> SaveArchivesToFile = new(["--save-archives-to-file"], "将下载过的视频记录到本地文件中, 用于后续跳过下载同个视频");
-    private static readonly Option<string> DelayPerPage = new(["--delay-per-page"], "设置下载合集分P之间的下载间隔时间(单位: 秒, 默认无间隔)");
+    private static readonly Option<int> DelayPerPage = new(["--delay-per-page"], () => 0, "设置下载合集分P之间的下载间隔时间(单位: 秒, 默认无间隔)");
     private static readonly Option<string> FilePattern = new(["--file-pattern", "-F"], 
         $"使用内置变量自定义单P存储文件名:\r\n\r\n" + 
         $"<videoTitle>: 视频主标题\r\n" + 
@@ -122,6 +123,7 @@ internal static class CommandLineInvoker
             if (bindingContext.ParseResult.HasOption(CoverOnly)) option.CoverOnly = bindingContext.ParseResult.GetValueForOption(CoverOnly)!;
             if (bindingContext.ParseResult.HasOption(SubOnly)) option.SubOnly = bindingContext.ParseResult.GetValueForOption(SubOnly)!;
             if (bindingContext.ParseResult.HasOption(Debug)) option.Debug = bindingContext.ParseResult.GetValueForOption(Debug)!;
+            if (bindingContext.ParseResult.HasOption(Insecure)) option.Insecure = bindingContext.ParseResult.GetValueForOption(Insecure)!;
             if (bindingContext.ParseResult.HasOption(SkipMux)) option.SkipMux = bindingContext.ParseResult.GetValueForOption(SkipMux)!;
     if (bindingContext.ParseResult.HasOption(DecryptDrm)) option.DecryptDrm = bindingContext.ParseResult.GetValueForOption(DecryptDrm)!;
     if (bindingContext.ParseResult.HasOption(DrmKey)) option.DrmKeyHex = bindingContext.ParseResult.GetValueForOption(DrmKey);
@@ -162,9 +164,9 @@ internal static class CommandLineInvoker
             if (bindingContext.ParseResult.HasOption(OnlyHevc)) option.OnlyHevc = bindingContext.ParseResult.GetValueForOption(OnlyHevc)!;
             if (bindingContext.ParseResult.HasOption(OnlyAvc)) option.OnlyAvc = bindingContext.ParseResult.GetValueForOption(OnlyAvc)!;
             if (bindingContext.ParseResult.HasOption(OnlyAv1)) option.OnlyAv1 = bindingContext.ParseResult.GetValueForOption(OnlyAv1)!;
-            if (bindingContext.ParseResult.HasOption(AddDfnSubfix)) option.AddDfnSubfix = bindingContext.ParseResult.GetValueForOption(AddDfnSubfix)!;
+            if (bindingContext.ParseResult.HasOption(AddDfnSubfix)) option.AddDfnSuffix = bindingContext.ParseResult.GetValueForOption(AddDfnSubfix)!;
             if (bindingContext.ParseResult.HasOption(NoPaddingPageNum)) option.NoPaddingPageNum = bindingContext.ParseResult.GetValueForOption(NoPaddingPageNum)!;
-            if (bindingContext.ParseResult.HasOption(BandwithAscending)) option.BandwithAscending = bindingContext.ParseResult.GetValueForOption(BandwithAscending)!;
+            if (bindingContext.ParseResult.HasOption(BandwithAscending)) option.BandwidthAscending = bindingContext.ParseResult.GetValueForOption(BandwithAscending)!;
             return option;
         }
     }
@@ -192,6 +194,7 @@ internal static class CommandLineInvoker
             SubOnly,
             CoverOnly,
             Debug,
+            Insecure,
             SkipMux,
             DecryptDrm,
             DrmKey,

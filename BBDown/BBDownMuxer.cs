@@ -18,16 +18,16 @@ static partial class BBDownMuxer
     public static string FFMPEG = "ffmpeg";
     public static string MP4BOX = "mp4box";
 
-    private static int RunExe(string app, string parms, bool customBin = false)
+    private static int RunExe(string app, string args)
     {
-        int code = 0;
-        Process p = new();
+        using Process p = new();
         p.StartInfo.FileName = app;
-        p.StartInfo.Arguments = parms;
+        p.StartInfo.Arguments = args;
         p.StartInfo.UseShellExecute = false;
         p.StartInfo.RedirectStandardError = true;
         p.StartInfo.CreateNoWindow = false;
-        p.ErrorDataReceived += delegate (object sendProcess, DataReceivedEventArgs output) {
+        p.ErrorDataReceived += (_, output) =>
+        {
             if (!string.IsNullOrWhiteSpace(output.Data))
                 Log(output.Data);
         };
@@ -35,9 +35,7 @@ static partial class BBDownMuxer
         p.Start();
         p.BeginErrorReadLine();
         p.WaitForExit();
-        p.Close();
-        p.Dispose();
-        return code;
+        return p.ExitCode;
     }
 
     private static string EscapeString(string str)
@@ -94,7 +92,7 @@ static partial class BBDownMuxer
         //----分析完毕
         var arguments = (Config.DEBUG_LOG ? " -v " : "") + inputArg + (metaArg.ToString() == "" ? "" : " -itags tool=" + metaArg) + $" -new -- \"{outPath}\"";
         LogDebug("mp4box命令: {0}", arguments);
-        return RunExe(MP4BOX, arguments, MP4BOX != "mp4box");
+        return RunExe(MP4BOX, arguments);
     }
 
     public static int MuxAV(bool useMp4box, string bvid, string videoPath, string audioPath, List<AudioMaterial> audioMaterial, string outPath, string desc = "", string title = "", string author = "", string episodeId = "", string pic = "", string lang = "", List<Subtitle>? subs = null, bool audioOnly = false, bool videoOnly = false, List<ViewPoint>? points = null, long pubTime = 0, bool simplyMux = false, bool isHevc = false)
@@ -199,7 +197,7 @@ static partial class BBDownMuxer
         string arguments = argsBuilder.ToString();
 
         LogDebug("ffmpeg命令: {0}", arguments);
-        return RunExe(FFMPEG, arguments, FFMPEG != "ffmpeg");
+        return RunExe(FFMPEG, arguments);
     }
 
     public static void MergeFLV(string[] files, string outPath)
@@ -215,7 +213,7 @@ static partial class BBDownMuxer
                 var tmpFile = Path.Combine(Path.GetDirectoryName(file)!, Path.GetFileNameWithoutExtension(file) + ".ts");
                 var arguments = $"-loglevel warning -y -i \"{file}\" -map 0 -c copy -f mpegts -bsf:v h264_mp4toannexb \"{tmpFile}\"";
                 LogDebug("ffmpeg命令: {0}", arguments);
-                RunExe("ffmpeg", arguments);
+                RunExe(FFMPEG, arguments);
                 File.Delete(file);
             }
             var f = GetFiles(Path.GetDirectoryName(files[0])!, ".ts");

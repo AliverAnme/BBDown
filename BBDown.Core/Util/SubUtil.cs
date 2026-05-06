@@ -3,6 +3,7 @@ using Google.Protobuf;
 using System.Text;
 using static BBDown.Core.Entity.Entity;
 using static BBDown.Core.Util.HTTPUtil;
+using static BBDown.Core.Logger;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 
@@ -245,8 +246,9 @@ public static partial class SubUtil
             }
             return subtitles;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogDebug("GetIntlSubtitlesFromApi1 failed: {0}", ex.Message);
             return null;
         }
     }
@@ -260,8 +262,11 @@ public static partial class SubUtil
                          $"/intl/gateway/v2/ogv/view/app/season?ep_id={epId}&platform=android&s_locale=zh_SG" + (Config.TOKEN != "" ? $"&access_key={Config.TOKEN}" : "");
             string json = await GetWebSourceAsync(api);
             using var infoJson = JsonDocument.Parse(json);
-            var subs = infoJson.RootElement.GetProperty("result").GetProperty("modules")[0].GetProperty("data")
-                .GetProperty("episodes")[index - 1].GetProperty("subtitles").EnumerateArray();
+            var modules = infoJson.RootElement.GetProperty("result").GetProperty("modules");
+            if (modules.GetArrayLength() == 0) return null;
+            var episodes = modules[0].GetProperty("data").GetProperty("episodes");
+            if (index < 1 || index > episodes.GetArrayLength()) return null;
+            var subs = episodes[index - 1].GetProperty("subtitles").EnumerateArray();
             foreach (var sub in subs)
             {
                 var lan = sub.GetProperty("key").ToString();
@@ -281,8 +286,9 @@ public static partial class SubUtil
             }
             return subtitles;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogDebug("GetIntlSubtitlesFromApi2 failed: {0}", ex.Message);
             return null;
         }
     }
@@ -319,8 +325,9 @@ public static partial class SubUtil
             //}
             return subtitles;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogDebug("GetSubtitlesFromApi1 failed: {0}", ex.Message);
             return null;
         }
     }
@@ -352,8 +359,9 @@ public static partial class SubUtil
 
             return subtitles;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogDebug("GetSubtitlesFromApi2 failed: {0}", ex.Message);
             return null;
         }
     }
@@ -397,8 +405,9 @@ public static partial class SubUtil
 
             return subtitles;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            LogDebug("GetSubtitlesFromApi3 failed: {0}", ex.Message);
             return null;
         }
     }

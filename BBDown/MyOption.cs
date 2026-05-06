@@ -23,6 +23,7 @@ internal class MyOption
     public bool SubOnly { get; set; }
     public bool Debug { get; set; }
     public bool SkipMux { get; set; }
+    public bool Insecure { get; set; }
     public bool DecryptDrm { get; set; }
     public string? DrmKeyHex { get; set; }
     public string? DrmKidHex { get; set; }
@@ -52,7 +53,7 @@ internal class MyOption
     public string Mp4boxPath { get; set; } = "";
     public string Aria2cPath { get; set; } = "";
     public string UposHost { get; set; } = "";
-    public string DelayPerPage { get; set; } = "0";
+    public int DelayPerPage { get; set; } = 0;
     public string Host { get; set; } = "api.bilibili.com";
     public string EpHost { get; set; } = "api.bilibili.com";
     public string TvHost { get; set; } = "api.snm0516.aisee.tv";
@@ -63,7 +64,7 @@ internal class MyOption
     public bool OnlyHevc { get; set; }
     public bool OnlyAvc { get; set; }
     public bool OnlyAv1 { get; set; }
-    public bool AddDfnSubfix { get; set; }
+    public bool AddDfnSuffix { get; set; }
     public bool NoPaddingPageNum { get; set; }
-    public bool BandwithAscending { get; set; }
+    public bool BandwidthAscending { get; set; }
 }

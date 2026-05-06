@@ -323,10 +323,13 @@ static class AppHelper
     /// <returns>字节流</returns>
     public static byte[] ReadMessage(byte[] data)
     {
-        byte first;
-        int size;
-        (first, size) = ReadInfo(data);
-        return first == 1 ? GzipDecompress(data[5..]) : data[5..(5 + size)];
+        if (data.Length < 5)
+            throw new InvalidDataException($"gRPC response too short: {data.Length} bytes");
+        (byte first, int size) = ReadInfo(data);
+        int payloadLen = first == 1 ? data.Length - 5 : Math.Min(size, data.Length - 5);
+        if (payloadLen <= 0)
+            throw new InvalidDataException($"Invalid gRPC payload length: {payloadLen}");
+        return first == 1 ? GzipDecompress(data[5..]) : data[5..(5 + payloadLen)];
     }
 
     /// <summary>

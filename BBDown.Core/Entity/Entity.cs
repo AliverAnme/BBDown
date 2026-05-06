@@ -129,7 +129,7 @@ public static class Entity
         public string? res;
         public string? fps;
         public required string codecs;
-        public long bandwith;
+        public long bandwidth;
         public int dur;
         public double size;
 
@@ -141,13 +141,13 @@ public static class Entity
                    res == video.res &&
                    fps == video.fps &&
                    codecs == video.codecs &&
-                   bandwith == video.bandwith &&
+                   bandwidth == video.bandwidth &&
                    dur == video.dur;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(id, dfn, res, fps, codecs, bandwith, dur);
+            return HashCode.Combine(id, dfn, res, fps, codecs, bandwidth, dur);
         }
     }
 
@@ -157,9 +157,9 @@ public static class Entity
         public required string dfn;
         public required string baseUrl;
         public required string codecs;
-        public required long bandwith;
+        public required long bandwidth;
         public required int dur;
-        
+
         // E-AC-3 => EAC3
         public string shortCodecs => codecs.ToUpper().Replace("-", string.Empty);
 
@@ -169,13 +169,13 @@ public static class Entity
                    id == audio.id &&
                    dfn == audio.dfn &&
                    codecs == audio.codecs &&
-                   bandwith == audio.bandwith &&
+                   bandwidth == audio.bandwidth &&
                    dur == audio.dur;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(id, dfn, codecs, bandwith, dur);
+            return HashCode.Combine(id, dfn, codecs, bandwidth, dur);
         }
     }
 

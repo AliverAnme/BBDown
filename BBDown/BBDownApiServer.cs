@@ -10,6 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 using BBDown.Core;
+using BBDown.Core.Util;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,6 +20,7 @@ namespace BBDown;
 public class BBDownApiServer
 {
     private WebApplication? app;
+    private readonly object _taskLock = new();
     private readonly List<DownloadTask> runningTasks = [];
     private readonly List<DownloadTask> finishedTasks = [];
 
@@ -43,13 +45,17 @@ public class BBDownApiServer
         app = builder.Build();
         app.UseCors("AllowAnyOrigin");
         var taskStatusApi = app.MapGroup("/get-tasks");
-        taskStatusApi.MapGet("/", handler: () => Results.Json(new DownloadTaskCollection(runningTasks, finishedTasks), AppJsonSerializerContext.Default.DownloadTaskCollection));
-        taskStatusApi.MapGet("/running", handler: () => Results.Json(runningTasks, AppJsonSerializerContext.Default.ListDownloadTask));
-        taskStatusApi.MapGet("/finished", handler: () => Results.Json(finishedTasks, AppJsonSerializerContext.Default.ListDownloadTask));
+        taskStatusApi.MapGet("/", handler: () => { lock (_taskLock) { return Results.Json(new DownloadTaskCollection(runningTasks, finishedTasks), AppJsonSerializerContext.Default.DownloadTaskCollection); } });
+        taskStatusApi.MapGet("/running", handler: () => { lock (_taskLock) { return Results.Json(runningTasks, AppJsonSerializerContext.Default.ListDownloadTask); } });
+        taskStatusApi.MapGet("/finished", handler: () => { lock (_taskLock) { return Results.Json(finishedTasks, AppJsonSerializerContext.Default.ListDownloadTask); } });
         taskStatusApi.MapGet("/{id}", (string id) =>
         {
-            var task = finishedTasks.FirstOrDefault(a => a.Aid == id);
-            var rtask = runningTasks.FirstOrDefault(a => a.Aid == id);
+            DownloadTask? task, rtask;
+            lock (_taskLock)
+            {
+                task = finishedTasks.FirstOrDefault(a => a.Aid == id);
+                rtask = runningTasks.FirstOrDefault(a => a.Aid == id);
+            }
             if (rtask is not null) task = rtask;
             if (task is null)
             {
@@ -64,7 +70,7 @@ public class BBDownApiServer
                 //var exception = bindingResult.Exception;
                 return Results.BadRequest("输入有误");
             }
-            var req = bindingResult.Result;
+            var req = bindingResult.Result!;
             _ = AddDownloadTaskAsync(req)
                 .ContinueWith(async task => {
                     // send request to callback webhook
@@ -73,12 +79,11 @@ public class BBDownApiServer
                         return;
                     }
                     string callback = req.CallBackWebHook;
-                    var client = new HttpClient();
                     var downloadTask = await task;
                     string? jsonContent = JsonSerializer.Serialize(downloadTask, AppJsonSerializerContext.Default.DownloadTask);
                     try
                     {
-                        await client.PostAsync(callback, new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json"));
+                        await HTTPUtil.AppHttpClient.PostAsync(callback, new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json"));
                     }
                     catch (System.Exception e)
                     {
@@ -88,9 +93,9 @@ public class BBDownApiServer
             return Results.Ok();
         });
         var finishedRemovalApi = app.MapGroup("remove-finished");
-        finishedRemovalApi.MapGet("/", () => { finishedTasks.RemoveAll(t => true); return Results.Ok(); });
-        finishedRemovalApi.MapGet("/failed", () => { finishedTasks.RemoveAll(t => !t.IsSuccessful); return Results.Ok(); });
-        finishedRemovalApi.MapGet("/{id}", (string id) => { finishedTasks.RemoveAll(t => t.Aid == id); return Results.Ok(); });
+        finishedRemovalApi.MapGet("/", () => { lock (_taskLock) { finishedTasks.RemoveAll(t => true); } return Results.Ok(); });
+        finishedRemovalApi.MapGet("/failed", () => { lock (_taskLock) { finishedTasks.RemoveAll(t => !t.IsSuccessful); } return Results.Ok(); });
+        finishedRemovalApi.MapGet("/{id}", (string id) => { lock (_taskLock) { finishedTasks.RemoveAll(t => t.Aid == id); } return Results.Ok(); });
     }
 
     public void Run(string url)
@@ -106,8 +111,8 @@ public class BBDownApiServer
             Console.WriteLine("如果您需要https，请额外配置反向代理");
             Console.ResetColor();
             Console.WriteLine();
-            Thread.Sleep(1);
-            Environment.Exit(1);
+            Environment.ExitCode = 1;
+            return;
         }
         app.Run(url);
     }
@@ -115,13 +120,14 @@ public class BBDownApiServer
     private async Task<DownloadTask> AddDownloadTaskAsync(MyOption option)
     {
         var aid = await BBDownUtil.GetAvIdAsync(option.Url);
-        DownloadTask? runningTask = runningTasks.FirstOrDefault(task => task.Aid == aid);
+        DownloadTask? runningTask;
+        lock (_taskLock) { runningTask = runningTasks.FirstOrDefault(t => t.Aid == aid); }
         if (runningTask is not null)
         {
             return runningTask;
         };
         var task = new DownloadTask(aid, option.Url, DateTimeOffset.Now.ToUnixTimeSeconds());
-        runningTasks.Add(task);
+        lock (_taskLock) { runningTasks.Add(task); }
         try
         {
             var (encodingPriority, dfnPriority, firstEncoding, downloadDanmaku, downloadDanmakuFormats, input, savePathFormat, lang, aidOri, delay) = Program.SetUpWork(option);
@@ -149,8 +155,11 @@ public class BBDownApiServer
             task.Progress = 1f;
             task.DownloadSpeed = (double)(task.TotalDownloadedBytes / (task.TaskFinishTime - task.TaskCreateTime));
         }
-        runningTasks.Remove(task);
-        finishedTasks.Add(task);
+        lock (_taskLock)
+        {
+            runningTasks.Remove(task);
+            finishedTasks.Add(task);
+        }
         return task;
     }
 }

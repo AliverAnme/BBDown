@@ -32,9 +32,9 @@ static partial class BBDownUtil
                 LogColor($"发现新版本：{latestVer}");
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            ;
+            LogDebug("检查更新失败: {0}", ex.Message);
         }
     }
 
@@ -250,9 +250,17 @@ static partial class BBDownUtil
     {
         if (!avid.All(char.IsDigit))
             return avid;
-        string api = $"https://www.bilibili.com/video/av{avid}/";
-        string location = await GetWebLocationAsync(api);
-        return location.Contains("/ep") ? $"ep:{EpRegex().Match(location).Groups[1].Value}" : avid;
+        try
+        {
+            string api = $"https://www.bilibili.com/video/av{avid}/";
+            string location = await GetWebLocationAsync(api);
+            return location.Contains("/ep") ? $"ep:{EpRegex().Match(location).Groups[1].Value}" : avid;
+        }
+        catch (Exception ex)
+        {
+            LogDebug("FixAvidAsync HEAD 请求失败: {0}", ex.Message);
+            return avid;
+        }
     }
 
     private static string GetAidByBV(string bv)
@@ -329,7 +337,6 @@ static partial class BBDownUtil
     public static string[] GetFiles(string dir, string ext)
     {
         List<string> al = [];
-        StringBuilder sb = new();
         DirectoryInfo d = new(dir);
         foreach (FileInfo fi in d.GetFiles())
         {
@@ -346,6 +353,13 @@ static partial class BBDownUtil
     private static readonly char[] InvalidChars = "34,60,62,124,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,58,42,63,92,47"
         .Split(',').Select(s => (char)byte.Parse(s)).ToArray();
 
+    private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
     public static string GetValidFileName(string input, string re = "_", bool filterSlash = false)
     {
         string title = input;
@@ -359,6 +373,9 @@ static partial class BBDownUtil
             title = title.Replace("/", re);
             title = title.Replace("\\", re);
         }
+        // 检测 Windows 保留文件名，添加前缀
+        if (ReservedNames.Contains(title))
+            title = "_" + title;
         return title;
     }
 
@@ -390,10 +407,10 @@ static partial class BBDownUtil
         throw new NotImplementedException();
     }
 
-    public static string GetSign(string parms)
+    public static string GetSign(string parameters)
     {
-        string toEncode = parms + "59b43e04ad6965f34319062b478f83dd";
-        return string.Concat(MD5.HashData(Encoding.UTF8.GetBytes(toEncode)).Select(i => i.ToString("x2")));
+        string toEncode = parameters + "59b43e04ad6965f34319062b478f83dd";
+        return Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(toEncode)));
     }
 
     public static string GetTimeStamp(bool bflag)
@@ -403,12 +420,11 @@ static partial class BBDownUtil
     }
 
     //https://stackoverflow.com/questions/1344221/how-can-i-generate-random-alphanumeric-strings
-    private static readonly Random random = new();
     public static string GetRandomString(int length)
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789";
         return new string(Enumerable.Repeat(chars, length)
-            .Select(s => s[random.Next(s.Length)]).ToArray());
+            .Select(s => s[Random.Shared.Next(s.Length)]).ToArray());
     }
 
     //https://stackoverflow.com/a/45088333
@@ -485,8 +501,9 @@ static partial class BBDownUtil
             process.WaitForExit();
             var match = LibavutilRegex().Match(info);
             if (!match.Success) return false;
-            if((Convert.ToInt32(match.Groups[1].Value)==57 && Convert.ToInt32(match.Groups[1].Value) >= 17)
-               || Convert.ToInt32(match.Groups[1].Value) > 57)
+            int major = Convert.ToInt32(match.Groups[1].Value);
+            int minor = Convert.ToInt32(match.Groups[2].Value);
+            if (major > 57 || (major == 57 && minor >= 17))
             {
                 return true;
             }
@@ -505,7 +522,7 @@ static partial class BBDownUtil
     /// <returns></returns>
     public static async Task<List<ViewPoint>> FetchPointsAsync(string cid, string aid)
     {
-        var ponints = new List<ViewPoint>();
+        var points = new List<ViewPoint>();
         try
         {
             string api = $"https://api.bilibili.com/x/player/wbi/v2?cid={cid}&aid={aid}";
@@ -515,7 +532,7 @@ static partial class BBDownUtil
             {
                 foreach (var point in vPoint.EnumerateArray())
                 {
-                    ponints.Add(new ViewPoint()
+                    points.Add(new ViewPoint()
                     {
                         title = point.GetProperty("content").GetString()!,
                         start = int.Parse(point.GetProperty("from").ToString()),
@@ -525,7 +542,7 @@ static partial class BBDownUtil
             }
         }
         catch (Exception) { }
-        return ponints;
+        return points;
     }
 
     /// <summary>
@@ -604,7 +621,7 @@ static partial class BBDownUtil
             var json = JsonDocument.Parse(source).RootElement;
             var is_login = json.GetProperty("data").GetProperty("isLogin").GetBoolean();
             var wbi_img = json.GetProperty("data").GetProperty("wbi_img");
-            Core.Config.WBI = GetMixinKey(RSubString(wbi_img.GetProperty("img_url").GetString()) + RSubString(wbi_img.GetProperty("sub_url").GetString()));
+            Core.Config.WBI = GetMixinKey(RSubString(wbi_img.GetProperty("img_url").GetString()!) + RSubString(wbi_img.GetProperty("sub_url").GetString()!));
             LogDebug("wbi: {0}", Core.Config.WBI);
             return is_login;
         }

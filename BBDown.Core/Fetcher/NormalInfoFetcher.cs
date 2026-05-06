@@ -97,20 +97,16 @@ public partial class NormalInfoFetcher : IFetcher
             }
         }
 
-        try
+        if (data.TryGetProperty("redirect_url", out var redirectUrl) && redirectUrl.ToString().Contains("bangumi"))
         {
-            if (data.GetProperty("redirect_url").ToString().Contains("bangumi"))
+            bangumi = true;
+            string epId = EpIdRegex().Match(redirectUrl.ToString()).Groups[1].Value;
+            //番剧内容通常不会有分P，如果有分P则不需要epId参数
+            if (pages.Count == 1)
             {
-                bangumi = true;
-                string epId = EpIdRegex().Match(data.GetProperty("redirect_url").ToString()).Groups[1].Value;
-                //番剧内容通常不会有分P，如果有分P则不需要epId参数
-                if (pages.Count == 1)
-                {
-                    pagesInfo.ForEach(p => p.epid = epId);
-                }
+                pagesInfo.ForEach(p => p.epid = epId);
             }
         }
-        catch { }
 
         var info = new VInfo
         {

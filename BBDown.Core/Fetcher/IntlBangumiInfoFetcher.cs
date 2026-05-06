@@ -17,7 +17,8 @@ public partial class IntlBangumiInfoFetcher : IFetcher
                      $"/intl/gateway/v2/ogv/view/app/season?ep_id={id}&platform=android&s_locale=zh_SG&mobi_app=bstar_a" + (Config.TOKEN != "" ? $"&access_key={Config.TOKEN}" : "");
         string json = (await GetWebSourceAsync(api)).Replace("\\/", "/");
         using var infoJson = JsonDocument.Parse(json);
-        var result = infoJson.RootElement.GetProperty("result");
+        if (!infoJson.RootElement.TryGetProperty("result", out var result))
+            throw new KeyNotFoundException("Intl Bangumi API response missing 'result' node");
         string seasonId = result.GetProperty("season_id").ToString();
         string cover = result.GetProperty("cover").ToString();
         string title = result.GetProperty("title").ToString();
@@ -53,10 +54,23 @@ public partial class IntlBangumiInfoFetcher : IFetcher
         {
             foreach (var section in modules.EnumerateArray())
             {
-                if (section.ToString().Contains($"/{id}"))
+                if (section.TryGetProperty("data", out var secData) &&
+                    secData.TryGetProperty("episodes", out var secEps))
                 {
-                    pages = section.GetProperty("data").GetProperty("episodes").EnumerateArray().ToList();
-                    break;
+                    bool foundInSection = false;
+                    foreach (var ep in secEps.EnumerateArray())
+                    {
+                        if (ep.TryGetProperty("id", out var eid) && eid.ToString() == id)
+                        {
+                            foundInSection = true;
+                            break;
+                        }
+                    }
+                    if (foundInSection)
+                    {
+                        pages = secEps.EnumerateArray().ToList();
+                        break;
+                    }
                 }
             }
         }
@@ -87,12 +101,15 @@ public partial class IntlBangumiInfoFetcher : IFetcher
             //跳过预告
             if (page.TryGetProperty("badge", out JsonElement badge) && badge.ToString() == "预告") continue;
             string res = "";
-            try
+            if (page.TryGetProperty("dimension", out var dim) &&
+                dim.TryGetProperty("width", out var w) &&
+                dim.TryGetProperty("height", out var h))
             {
-                res = page.GetProperty("dimension").GetProperty("width").ToString() + "x" + page.GetProperty("dimension").GetProperty("height").ToString();
+                res = $"{w}x{h}";
             }
-            catch (Exception) { }
-            string _title = page.GetProperty("title").ToString() + " " + page.GetProperty("long_title").ToString();
+            string _title = page.GetProperty("title").ToString();
+            if (page.TryGetProperty("long_title", out var lt) && lt.ValueKind != JsonValueKind.Null)
+                _title += " " + lt.ToString();
             _title = _title.Trim();
             Page p = new(i++,
                 page.GetProperty("aid").ToString(),
@@ -114,7 +131,7 @@ public partial class IntlBangumiInfoFetcher : IFetcher
             PubTime = pubTime,
             PagesInfo = pagesInfo,
             IsBangumi = true,
-            IsCheese = true,
+            IsCheese = false,
             Index = index
         };
 
