@@ -22,7 +22,8 @@ public class FavListFetcher : IFetcher
         if (favId == "")
         {
             var favListApi = $"https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid={mid}";
-            favId = JsonDocument.Parse(await GetWebSourceAsync(favListApi)).RootElement.GetProperty("data").GetProperty("list").EnumerateArray().First().GetProperty("id").ToString();
+            using var favDoc = JsonDocument.Parse(await GetWebSourceAsync(favListApi));
+            favId = favDoc.RootElement.GetProperty("data").GetProperty("list").EnumerateArray().First().GetProperty("id").ToString();
         }
 
         int pageSize = 20;
@@ -45,7 +46,7 @@ public class FavListFetcher : IFetcher
         {
             api = $"https://api.bilibili.com/x/v3/fav/resource/list?media_id={favId}&pn={page}&ps={pageSize}&order=mtime&type=2&tid=0&platform=web";
             json = await GetWebSourceAsync(api);
-            var jsonDoc = JsonDocument.Parse(json);
+            using var jsonDoc = JsonDocument.Parse(json);
             data = jsonDoc.RootElement.GetProperty("data");
             medias.AddRange(data.GetProperty("medias").EnumerateArray().ToList());
         }

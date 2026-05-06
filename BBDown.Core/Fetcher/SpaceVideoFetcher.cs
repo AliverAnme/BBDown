@@ -12,14 +12,15 @@ public class SpaceVideoFetcher : IFetcher
         id = id[4..];
         // using the live API can bypass w_rid
         string userInfoApi = $"https://api.live.bilibili.com/live_user/v1/Master/info?uid={id}";
-        string userName = GetValidFileName(JsonDocument.Parse(await GetWebSourceAsync(userInfoApi)).RootElement.GetProperty("data").GetProperty("info").GetProperty("uname").ToString(), ".", true);
+        using var userDoc = JsonDocument.Parse(await GetWebSourceAsync(userInfoApi));
+        string userName = GetValidFileName(userDoc.RootElement.GetProperty("data").GetProperty("info").GetProperty("uname").ToString(), filterSlash: true);
         List<string> urls = new();
         int pageSize = 50;
         int pageNumber = 1;
         var api = Parser.WbiSign($"mid={id}&order=pubdate&pn={pageNumber}&ps={pageSize}&tid=0&wts={DateTimeOffset.Now.ToUnixTimeSeconds().ToString()}");
         api = $"https://api.bilibili.com/x/space/wbi/arc/search?{api}";
         string json = await GetWebSourceAsync(api);
-        var infoJson = JsonDocument.Parse(json);
+        using var infoJson = JsonDocument.Parse(json);
         var pages = infoJson.RootElement.GetProperty("data").GetProperty("list").GetProperty("vlist").EnumerateArray();
         foreach (var page in pages)
         {
@@ -48,7 +49,7 @@ pause");
         var api = Parser.WbiSign($"mid={mid}&order=pubdate&pn={pageNumber}&ps={pageSize}&tid=0&wts={DateTimeOffset.Now.ToUnixTimeSeconds().ToString()}");
         api = $"https://api.bilibili.com/x/space/wbi/arc/search?{api}";
         string json = await GetWebSourceAsync(api);
-        var infoJson = JsonDocument.Parse(json);
+        using var infoJson = JsonDocument.Parse(json);
         var pages = infoJson.RootElement.GetProperty("data").GetProperty("list").GetProperty("vlist").EnumerateArray();
         foreach (var page in pages)
         {
@@ -57,7 +58,7 @@ pause");
         return urls;
     }
 
-    private static string GetValidFileName(string input, string re = ".", bool filterSlash = false)
+    private static string GetValidFileName(string input, string re = "_", bool filterSlash = false)
     {
         string title = input;
         foreach (char invalidChar in Path.GetInvalidFileNameChars())

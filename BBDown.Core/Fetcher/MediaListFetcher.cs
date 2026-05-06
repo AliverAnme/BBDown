@@ -2,6 +2,7 @@
 using System.Text.Json;
 using static BBDown.Core.Entity.Entity;
 using static BBDown.Core.Util.HTTPUtil;
+using static BBDown.Core.Logger;
 
 namespace BBDown.Core.Fetcher;
 
@@ -28,8 +29,9 @@ public class MediaListFetcher : IFetcher
             {
                 return await new SeriesListFetcher().FetchAsync($"seriesBizId:{id}");
             }
-            catch
+            catch (Exception fallbackEx)
             {
+                LogDebug("MediaList fallback to SeriesList failed: {0}", fallbackEx.Message);
                 var code = root.TryGetProperty("code", out var codeElem) && codeElem.ValueKind == JsonValueKind.Number
                     ? codeElem.GetInt32()
                     : 0;
@@ -82,8 +84,8 @@ public class MediaListFetcher : IFetcher
                         page.GetProperty("id").ToString(),
                         "", //epid
                         pageCount == 1 ? m.GetProperty("title").ToString() : $"{m.GetProperty("title")}_P{page.GetProperty("page")}_{page.GetProperty("title")}", //单P使用外层标题 多P则拼接内层子标题
-                        page.GetProperty("duration").GetInt32(),
-                        page.GetProperty("dimension").GetProperty("width").ToString() + "x" + page.GetProperty("dimension").GetProperty("height").ToString(),
+                        page.TryGetProperty("duration", out var dur) ? dur.GetInt32() : 0,
+                        page.TryGetProperty("dimension", out var dim) && dim.TryGetProperty("width", out var w) && dim.TryGetProperty("height", out var h) ? $"{w}x{h}" : "",
                         m.GetProperty("pubtime").GetInt64(),
                         m.GetProperty("cover").ToString(),
                         desc,
