@@ -60,6 +60,7 @@ Options:
   --sub-only                                     仅下载字幕
   --cover-only                                   仅下载封面
   --debug                                        输出调试日志
+  --insecure                                     跳过SSL证书验证(仅用于抓包/代理场景)
   --skip-mux                                     跳过混流步骤
   --skip-subtitle                                跳过字幕下载
   --skip-cover                                   跳过封面下载
@@ -108,7 +109,12 @@ Options:
   --upos-host <upos-host>                        自定义upos服务器
   --force-replace-host                           强制替换下载服务器host(默认开启)
   --save-archives-to-file                        将下载过的视频记录到本地文件中, 用于后续跳过下载同个视频
-  --delay-per-page <delay-per-page>              设置下载合集分P之间的下载间隔时间(单位: 秒, 默认无间隔)
+  --delay-per-page <delay-per-page>              设置下载合集分P之间的下载间隔时间(单位: 秒, 整数, 默认无间隔)
+  --decrypt-drm, -drm                            尝试解密DRM保护视频(需要 device.wvd)
+  --key <key>                                    DRM解密密钥 (hex)
+  --kid <kid>                                    DRM密钥ID (hex)
+  --mp4decrypt-path <mp4decrypt-path>            设置mp4decrypt的路径
+  --wvd-path <wvd-path>                          设置device.wvd的路径
   --host <host>                                  指定BiliPlus host(使用BiliPlus需要access_token, 不需要cookie, 解析服务器能够获取你账号的大部分权限!)
   --ep-host <ep-host>                            指定BiliPlus EP host(用于代理api.bilibili.com/pgc/view/web/season, 大部分解析服务器不支持代理该接口)
   --tv-host <tv-host>                            自定义tv端接口请求Host(用于代理api.snm0516.aisee.tv)
@@ -140,11 +146,14 @@ Commands:
 - [x] 支持调用aria2c下载
 - [x] 支持AVC/HEVC/AV1编码
 - [x] **支持8K/HDR/杜比视界/杜比全景声下载**
+- [x] **Widevine DRM 解密 (原生C#实现, 无需 Python)**
 - [x] 自定义存储文件名
 
 # TODO
 - [ ] 自动刷新cookie
 - [ ] 支持更多自定义选项
+- [ ] API 服务器下载任务队列限制
+- [ ] 拆分下载/解析核心方法与测试覆盖
 
 # 使用教程
 
