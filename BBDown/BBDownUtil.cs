@@ -484,18 +484,13 @@ static partial class BBDownUtil
     {
         try
         {
-            var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = BBDownMuxer.FFMPEG,
-                    Arguments = "-version",
-                    UseShellExecute = false,
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    CreateNoWindow = true
-                }
-            };
+            using var process = new Process();
+            process.StartInfo.FileName = BBDownMuxer.FFMPEG;
+            process.StartInfo.Arguments = "-version";
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.CreateNoWindow = true;
             process.Start();
             string info = process.StandardOutput.ReadToEnd() + Environment.NewLine + process.StandardError.ReadToEnd();
             process.WaitForExit();

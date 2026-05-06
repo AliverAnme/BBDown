@@ -1,22 +1,25 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS builder
 
-WORKDIR /app
+WORKDIR /src
 
-COPY . .
+COPY BBDown.Core/ BBDown.Core/
+COPY BBDown/ BBDown/
+COPY BBDown.sln .
 
-RUN dotnet build -c Release
+RUN dotnet restore BBDown.sln
+RUN dotnet publish BBDown -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 
 WORKDIR /app
 
-COPY --from=builder /app/BBDown/bin/Release/net9.0 .
-
-EXPOSE 23333
-
 # install ffmpeg
 RUN apt-get update && \
     apt-get install -y ffmpeg && \
-    chmod +x /app/BBDown
+    rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT ["/app/BBDown", "serve", "-l", "http://0.0.0.0:23333"]
+COPY --from=builder /app/publish .
+
+EXPOSE 23333
+
+ENTRYPOINT ["dotnet", "BBDown.dll", "serve", "-l", "http://0.0.0.0:23333"]
