@@ -1,0 +1,138 @@
+syntax = "proto2";
+
+package widevine_proto;
+option csharp_namespace = "BBDown.Core.DRM.Proto";
+
+// --- Device identification (embedded in .wvd file) ---
+
+message ClientIdentification {
+  enum TokenType {
+    KEYBOX = 0;
+    DRM_DEVICE_CERTIFICATE = 1;
+  }
+  optional TokenType Type = 1;
+  optional bytes Token = 2;
+  optional bytes ClientInfo = 4;
+  optional bytes ProviderInfo = 5;
+}
+
+message ClientInfo {
+  optional string Name = 1;
+  optional string Version = 2;
+  optional bytes ClientId = 3;
+  optional string ModelName = 4;
+  optional string CompanyName = 5;
+}
+
+// --- PSSH box payload ---
+
+message WidevineCencHeader {
+  enum Algorithm {
+    UNENCRYPTED = 0;
+    AESCTR = 1;
+  }
+  optional Algorithm algorithm = 1;
+  repeated bytes key_ids = 2;
+  optional string provider = 3;
+  optional bytes content_id = 4;
+  optional string policy = 6;
+  optional bytes crypto_period_index = 7;
+  optional bytes grouped_license = 8;
+  optional uint32 protection_scheme = 9;
+  optional uint32 crypto_period_seconds = 10;
+}
+
+// --- License request ---
+
+message LicenseRequest {
+  message ContentIdentification {
+    message WidevinePsshData {
+      repeated bytes key_ids = 2;
+      optional bytes pssh_data = 3;
+      optional uint32 license_type = 4;
+      optional bytes request_id = 5;
+    }
+    optional WidevinePsshData widevine_pssh_data = 2;
+  }
+  optional ClientIdentification client_id = 1;
+  optional ContentIdentification content_id = 2;
+  enum LicenseType {
+    AUTOMATIC = 0;
+    STREAMING = 1;
+    OFFLINE = 2;
+  }
+  optional LicenseType type = 3;
+  optional uint32 request_time = 4;
+  optional bytes key_control_nonce = 7;
+  optional bytes request_id = 8;
+  optional uint32 grace_period_end = 5;
+}
+
+// --- Signed envelope (used for both request and response) ---
+
+message SignedMessage {
+  enum MessageType {
+    LICENSE_REQUEST = 1;
+    LICENSE = 2;
+    SERVICE_CERTIFICATE_REQUEST = 3;
+    SERVICE_CERTIFICATE = 4;
+  }
+  optional MessageType type = 1;
+  optional bytes msg = 2;
+  optional bytes signature = 3;
+  optional bytes session_key = 4;
+}
+
+// --- License (key response) ---
+
+message License {
+  message KeyContainer {
+    enum KeyType {
+      SIGNING = 1;
+      CONTENT = 2;
+      KEY_CONTROL = 3;
+      OPERATOR_SESSION = 4;
+    }
+    optional bytes Id = 1;
+    optional bytes Iv = 2;
+    optional bytes Key = 3;
+    optional KeyType Type = 4;
+    optional uint32 Level = 5;
+  }
+  message Policy {
+    optional bool can_play = 1;
+    optional bool can_persist = 2;
+    optional bool can_renew = 3;
+    optional uint32 rental_duration_seconds = 4;
+    optional uint32 playback_duration_seconds = 5;
+    optional uint32 license_duration_seconds = 6;
+  }
+  optional bytes id = 1;
+  optional Policy policy = 2;
+  repeated KeyContainer key = 3;
+  optional uint32 license_start_time = 4;
+  optional bytes provider_session_token = 5;
+}
+
+// --- Service certificate ---
+
+message DrmCertificate {
+  enum Type {
+    SERVICE = 0;
+    CLIENT = 1;
+  }
+  optional Type type = 1;
+  optional bytes serial_number = 2;
+  optional uint32 creation_time_seconds = 3;
+  optional bytes public_key = 4;
+  optional bytes issuer = 5;
+  optional bytes subject = 6;
+  optional uint32 expiration_time_seconds = 7;
+  optional bytes provider_id = 8;
+}
+
+message SignedDrmCertificate {
+  optional bytes certificate = 1;
+  optional bytes signature = 2;
+  optional bytes signer = 3;
+}

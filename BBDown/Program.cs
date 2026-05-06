@@ -970,8 +970,7 @@ partial class Program
             LogWarn("自动密钥提取失败，文件将保持加密状态。");
             LogWarn("");
             LogWarn("解决方案：");
-            LogWarn("  1. 确保 Python + pywidevine 已安装:");
-            LogWarn("     pip install pywidevine 'construct==2.8.8'");
+            LogWarn("  1. 确保 device.wvd 文件放置在程序目录下");
             LogWarn($"  2. 或手动指定: BBDown <url> --key <KEY_HEX> --kid {parsed.KidHex}");
             LogWarn("============================================");
             return;
