@@ -57,7 +57,7 @@ internal static class CommandLineInvoker
     private static readonly Option<string> UposHost = new(["--upos-host"], "自定义upos服务器");
     private static readonly Option<bool> ForceReplaceHost = new(["--force-replace-host"], "强制替换下载服务器host(默认开启)");
     private static readonly Option<bool> SaveArchivesToFile = new(["--save-archives-to-file"], "将下载过的视频记录到本地文件中, 用于后续跳过下载同个视频");
-    private static readonly Option<int> DelayPerPage = new(["--delay-per-page"], () => 0, "设置下载合集分P之间的下载间隔时间(单位: 秒, 默认无间隔)");
+    private static readonly Option<int> DelayPerPage = new(["--delay-per-page"], "设置下载合集分P之间的下载间隔时间(单位: 秒, 默认无间隔)");
     private static readonly Option<string> FilePattern = new(["--file-pattern", "-F"], 
         $"使用内置变量自定义单P存储文件名:\r\n\r\n" + 
         $"<videoTitle>: 视频主标题\r\n" + 
@@ -154,7 +154,7 @@ internal static class CommandLineInvoker
             if (bindingContext.ParseResult.HasOption(UposHost)) option.UposHost = bindingContext.ParseResult.GetValueForOption(UposHost)!;
             if (bindingContext.ParseResult.HasOption(ForceReplaceHost)) option.ForceReplaceHost = bindingContext.ParseResult.GetValueForOption(ForceReplaceHost)!;
             if (bindingContext.ParseResult.HasOption(SaveArchivesToFile)) option.SaveArchivesToFile = bindingContext.ParseResult.GetValueForOption(SaveArchivesToFile)!;
-            if (bindingContext.ParseResult.HasOption(DelayPerPage)) option.DelayPerPage = bindingContext.ParseResult.GetValueForOption(DelayPerPage)!;
+            if (bindingContext.ParseResult.HasOption(DelayPerPage)) option.DelayPerPage = bindingContext.ParseResult.GetValueForOption(DelayPerPage);
             if (bindingContext.ParseResult.HasOption(Host)) option.Host = bindingContext.ParseResult.GetValueForOption(Host)!;
             if (bindingContext.ParseResult.HasOption(EpHost)) option.EpHost = bindingContext.ParseResult.GetValueForOption(EpHost)!;
             if (bindingContext.ParseResult.HasOption(TvHost)) option.TvHost = bindingContext.ParseResult.GetValueForOption(TvHost)!;
