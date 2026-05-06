@@ -27,7 +27,7 @@ public partial class NormalInfoFetcher : IFetcher
         var cid = data.GetProperty("cid").GetInt64();
 
         // 互动视频 1:是 0:否
-        var isSteinGate = data.GetProperty("rights").GetProperty("is_stein_gate").GetInt16();
+        var isSteinGate = data.TryGetProperty("rights", out var rights) && rights.TryGetProperty("is_stein_gate", out var sg) ? sg.GetInt16() : (short)0;
 
         // 分p信息
         List<Page> pagesInfo = new();
@@ -40,7 +40,7 @@ public partial class NormalInfoFetcher : IFetcher
                 "", //epid
                 page.GetProperty("part").ToString().Trim(),
                 page.GetProperty("duration").GetInt32(),
-                page.GetProperty("dimension").GetProperty("width").ToString() + "x" + page.GetProperty("dimension").GetProperty("height").ToString(),
+                page.TryGetProperty("dimension", out var dim) && dim.TryGetProperty("width", out var w) && dim.TryGetProperty("height", out var h) ? $"{w}x{h}" : "",
                 pubTime, //分p视频没有发布时间
                 "",
                 "",
@@ -61,11 +61,12 @@ public partial class NormalInfoFetcher : IFetcher
 
             if (interactionNode is { InnerText.Length: > 0 })
             {
-                var graphVersion = JsonDocument.Parse(interactionNode.InnerText).RootElement
-                    .GetProperty("graph_version").GetInt64();
+                using var graphDoc = JsonDocument.Parse(interactionNode.InnerText);
+                var graphVersion = graphDoc.RootElement.GetProperty("graph_version").GetInt64();
                 var edgeInfoApi = $"https://api.bilibili.com/x/stein/edgeinfo_v2?graph_version={graphVersion}&bvid={bvid}";
                 var edgeInfoJson = await GetWebSourceAsync(edgeInfoApi);
-                var edgeInfoData = JsonDocument.Parse(edgeInfoJson).RootElement.GetProperty("data");
+                using var edgeDoc = JsonDocument.Parse(edgeInfoJson);
+                var edgeInfoData = edgeDoc.RootElement.GetProperty("data");
                 var questions = edgeInfoData.GetProperty("edges").GetProperty("questions").EnumerateArray()
                     .ToList();
                 var index = 2; // 互动视频分P索引从2开始
