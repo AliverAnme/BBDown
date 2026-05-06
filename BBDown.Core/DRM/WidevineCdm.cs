@@ -14,6 +14,10 @@ public sealed class WidevineCdm : IDisposable
 
     private const string LicenseUrl = "https://bvc-drm.bilivideo.com/bili_widevine";
     private const string CertUrl = "https://bvc-drm.bilivideo.com/cer/bilibili_certificate.bin";
+    private static readonly byte[] WidevineSystemId = {
+        0xed, 0xef, 0x8b, 0xa9, 0x79, 0xd6, 0x4a, 0xce,
+        0xa3, 0xc8, 0x27, 0xdc, 0xd5, 0x1d, 0x21, 0xed
+    };
 
     private WidevineCdm(WvdDevice device)
     {
@@ -104,16 +108,21 @@ public sealed class WidevineCdm : IDisposable
         var kids = new List<byte[]>();
         try
         {
-            var pos = 8; // skip box size + type
+            if (raw.Length < 28) return kids; // minimum PSSH box: 8 header + 4 fullbox + 16 system_id
 
+            var pos = 8; // skip box size + type
             var version = raw[pos];
             pos += 4; // version + flags
-            pos += 16; // system_id
+            // validate Widevine system_id
+            if (!raw.AsSpan(pos, 16).SequenceEqual(WidevineSystemId))
+                return kids;
+            pos += 16;
 
             if (version >= 1)
             {
+                if (pos + 4 > raw.Length) return kids;
                 var count = ReadU32Be(raw, pos); pos += 4;
-                for (var i = 0; i < count; i++)
+                for (var i = 0; i < count && pos + 16 <= raw.Length; i++)
                 {
                     var kid = new byte[16];
                     Buffer.BlockCopy(raw, pos, kid, 0, 16);
@@ -122,8 +131,9 @@ public sealed class WidevineCdm : IDisposable
                 }
             }
 
+            if (pos + 4 > raw.Length) return kids;
             var dataSize = (int)ReadU32Be(raw, pos); pos += 4;
-            if (dataSize > 0 && pos + dataSize <= raw.Length)
+            if (dataSize > 0 && dataSize <= 4096 && pos + dataSize <= raw.Length)
             {
                 var psshData = new byte[dataSize];
                 Buffer.BlockCopy(raw, pos, psshData, 0, dataSize);
@@ -152,12 +162,16 @@ public sealed class WidevineCdm : IDisposable
 
     private byte[] BuildChallenge(List<byte[]> keyIds, byte[] psshRaw)
     {
+        var nonce = new byte[32];
+        RandomNumberGenerator.Fill(nonce);
+
         var req = new LicenseRequest
         {
             ClientId = _device.ClientIdentification,
             Type = LicenseRequest.Types.LicenseType.Streaming,
             RequestTime = (uint)DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             GracePeriodEnd = (uint)DateTimeOffset.UtcNow.AddMinutes(10).ToUnixTimeSeconds(),
+            KeyControlNonce = ByteString.CopyFrom(nonce),
         };
         var wid = new LicenseRequest.Types.ContentIdentification.Types.WidevinePsshData();
         foreach (var kid in keyIds)
@@ -218,6 +232,12 @@ public sealed class WidevineCdm : IDisposable
             return null;
 
         var msg = sm.Msg.ToByteArray();
+        if (msg.Length < 16)
+        {
+            Logger.LogWarn("许可证响应数据异常");
+            return null;
+        }
+
         var sig = sm.Signature.ToByteArray();
 
         var ok = _serviceKey!.VerifyData(msg, sig, HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
@@ -231,6 +251,12 @@ public sealed class WidevineCdm : IDisposable
         byte[] sessionKey;
         try { sessionKey = _device.Rsa.Decrypt(encKey, RSAEncryptionPadding.OaepSHA1); }
         catch { sessionKey = _device.Rsa.Decrypt(encKey, RSAEncryptionPadding.OaepSHA256); }
+
+        if (sessionKey.Length != 16)
+        {
+            Logger.LogWarn($"会话密钥长度异常: {sessionKey.Length}");
+            return null;
+        }
 
         var msgIv = new byte[16];
         Buffer.BlockCopy(msg, 0, msgIv, 0, 16);
@@ -248,11 +274,18 @@ public sealed class WidevineCdm : IDisposable
                 continue;
 
             var keyIv = kc.Iv?.ToByteArray() ?? new byte[16];
+            if (keyIv.Length < 16)
+            {
+                var ivPadded = new byte[16];
+                Buffer.BlockCopy(keyIv, 0, ivPadded, 0, Math.Min(keyIv.Length, 16));
+                keyIv = ivPadded;
+            }
             var encContentKey = kc.Key.ToByteArray();
             byte[] contentKey;
 
-            // 16 字节 = ECB (单块), 32 字节 = CBC (带 PKCS7 填充)
-            if (encContentKey.Length == 16)
+            // Widevine spec: if IV is unset or all zeros → ECB, otherwise CBC
+            var isZeroIv = keyIv.All(b => b == 0);
+            if (isZeroIv)
             {
                 contentKey = AesEcbDecrypt(encContentKey, sessionKey);
             }
@@ -307,9 +340,16 @@ public sealed class WidevineCdm : IDisposable
 
     private static byte[] Pkcs7Unpad(byte[] data)
     {
+        if (data.Length == 0)
+            throw new InvalidDataException("empty data for PKCS7 unpad");
         var pad = data[^1];
         if (pad == 0 || pad > 16 || pad > data.Length)
             throw new InvalidDataException("bad PKCS7 padding");
+        for (var i = data.Length - pad; i < data.Length; i++)
+        {
+            if (data[i] != pad)
+                throw new InvalidDataException("inconsistent PKCS7 padding");
+        }
         var result = new byte[data.Length - pad];
         Buffer.BlockCopy(data, 0, result, 0, result.Length);
         return result;

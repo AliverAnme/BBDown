@@ -190,8 +190,16 @@ static partial class BBDownUtil
         }
         else if (input.StartsWith("ss"))
         {
-            string epId = await GetEpIdByBangumiSSIdAsync(input[2..]);
-            avid = $"ep:{epId}";
+            try
+            {
+                string epId = await GetEpIdByBangumiSSIdAsync(input[2..]);
+                avid = $"ep:{epId}";
+            }
+            catch
+            {
+                string epId = await GetEpidBySSIdAsync(input[2..]);
+                avid = $"cheese:{epId}";
+            }
         }
         else if (input.StartsWith("md"))
         {

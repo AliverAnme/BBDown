@@ -1021,7 +1021,7 @@ partial class Program
         {
             FileName = mp4decrypt,
             Arguments = $"--key {kid}:{key} \"{input}\" \"{output}\"",
-            RedirectStandardOutput = true,
+            RedirectStandardOutput = false,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -1029,11 +1029,12 @@ partial class Program
 
         using var proc = Process.Start(psi);
         if (proc == null) return;
+        var stderrTask = proc.StandardError.ReadToEndAsync();
         await proc.WaitForExitAsync();
 
         if (proc.ExitCode != 0)
         {
-            var err = await proc.StandardError.ReadToEndAsync();
+            var err = await stderrTask;
             LogError($"mp4decrypt failed: {err}");
         }
     }

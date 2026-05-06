@@ -12,8 +12,8 @@ message ClientIdentification {
   }
   optional TokenType Type = 1;
   optional bytes Token = 2;
-  optional bytes ClientInfo = 4;
-  optional bytes ProviderInfo = 5;
+  optional bytes ClientInfo = 3;
+  optional bytes ProviderInfo = 4;
 }
 
 message ClientInfo {
@@ -35,11 +35,11 @@ message WidevineCencHeader {
   repeated bytes key_ids = 2;
   optional string provider = 3;
   optional bytes content_id = 4;
-  optional string policy = 6;
-  optional bytes crypto_period_index = 7;
-  optional bytes grouped_license = 8;
-  optional uint32 protection_scheme = 9;
-  optional uint32 crypto_period_seconds = 10;
+  optional string policy = 5;
+  optional bytes crypto_period_index = 6;
+  optional bytes grouped_license = 7;
+  optional uint32 protection_scheme = 8;
+  optional uint32 crypto_period_seconds = 9;
 }
 
 // --- License request ---
