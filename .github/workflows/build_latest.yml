@@ -4,7 +4,7 @@ on: [push,workflow_dispatch]
 
 env:
   DOTNET_SDK_VERSION: "9.0.306"
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   set-date:
@@ -21,10 +21,10 @@ jobs:
     needs: set-date
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
       - name: Set up dotnet
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
@@ -60,8 +60,8 @@ jobs:
     needs: set-date
 
     steps:
-      - uses: actions/checkout@v1
-      
+      - uses: actions/checkout@v4
+
       - name: Build x64 in Ubuntu 18.04 container (for glibc 2.27 compatibility)
         run: |
           # 在 Ubuntu 18.04 容器中执行完整构建流程
@@ -71,11 +71,11 @@ jobs:
             ubuntu:18.04 \
             bash -c "
               set -e
-  
+
               # 安装编译和运行依赖
               apt-get update
               DEBIAN_FRONTEND=noninteractive apt-get install -y wget build-essential clang libicu-dev zlib1g libcurl4-openssl-dev libkrb5-dev
-  
+
               # 下载并安装 .NET SDK
               DOTNET_SDK_VERSION='${{ env.DOTNET_SDK_VERSION }}'
               DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-x64.tar.gz\"
@@ -83,11 +83,11 @@ jobs:
               mkdir -p /opt/dotnet
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
-  
+
               # 编译 Native AOT 输出到挂载的 artifact 目录
               dotnet publish BBDown -r linux-x64 -c Release -o /workspace/artifact
             "
-      
+
       - name: Build arm64 in Ubuntu 18.04 container (for glibc 2.27 compatibility)
         run: |
           # 在 Ubuntu 18.04 容器中执行完整构建流程
@@ -97,7 +97,7 @@ jobs:
             mcr.microsoft.com/dotnet-buildtools/prereqs:ubuntu-18.04-cross-arm64-20220312201346-b2c2436 \
             bash -c "
               set -e
-  
+
               # 下载并安装 .NET SDK
               DOTNET_SDK_VERSION='${{ env.DOTNET_SDK_VERSION }}'
               DOTNET_SDK_URL=\"https://builds.dotnet.microsoft.com/dotnet/Sdk/\${DOTNET_SDK_VERSION}/dotnet-sdk-\${DOTNET_SDK_VERSION}-linux-x64.tar.gz\"
@@ -105,7 +105,7 @@ jobs:
               mkdir -p /opt/dotnet
               tar -xzf dotnet-sdk.tar.gz -C /opt/dotnet
               export PATH=\"/opt/dotnet:\$PATH\"
-  
+
               # 编译 Native AOT 输出到挂载的 artifact 目录
               dotnet publish BBDown -r linux-arm64 -c Release -p:StripSymbols=true -p:CppCompilerAndLinker=clang-9 -p:SysRoot=/crossrootfs/arm64 -o /workspace/artifact-arm64
             "
@@ -134,10 +134,10 @@ jobs:
     needs: set-date
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
 
       - name: Set up dotnet
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
