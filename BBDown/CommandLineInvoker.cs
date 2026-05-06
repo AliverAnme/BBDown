@@ -34,6 +34,8 @@ internal static class CommandLineInvoker
     private static readonly Option<bool> DecryptDrm = new(["--decrypt-drm", "-drm"], "尝试解密的DRM保护视频");
     private static readonly Option<string> DrmKey = new(["--key"], "DRM解密密钥 (hex)");
     private static readonly Option<string> DrmKid = new(["--kid"], "DRM密钥ID (hex)");
+    private static readonly Option<string> Mp4decryptPath = new(["--mp4decrypt-path"], "设置mp4decrypt的路径");
+    private static readonly Option<string> WvdPath = new(["--wvd-path"], "设置device.wvd的路径");
     private static readonly Option<bool> SkipSubtitle = new(["--skip-subtitle"], "跳过字幕下载");
     private static readonly Option<bool> SkipCover = new(["--skip-cover"], "跳过封面下载");
     private static readonly Option<bool> ForceHttp = new(["--force-http"], "下载音视频时强制使用HTTP协议替换HTTPS(默认开启)");
@@ -124,6 +126,8 @@ internal static class CommandLineInvoker
     if (bindingContext.ParseResult.HasOption(DecryptDrm)) option.DecryptDrm = bindingContext.ParseResult.GetValueForOption(DecryptDrm)!;
     if (bindingContext.ParseResult.HasOption(DrmKey)) option.DrmKeyHex = bindingContext.ParseResult.GetValueForOption(DrmKey);
     if (bindingContext.ParseResult.HasOption(DrmKid)) option.DrmKidHex = bindingContext.ParseResult.GetValueForOption(DrmKid);
+    if (bindingContext.ParseResult.HasOption(Mp4decryptPath)) option.Mp4decryptPath = bindingContext.ParseResult.GetValueForOption(Mp4decryptPath)!;
+    if (bindingContext.ParseResult.HasOption(WvdPath)) option.WvdPath = bindingContext.ParseResult.GetValueForOption(WvdPath)!;
             if (bindingContext.ParseResult.HasOption(SkipSubtitle)) option.SkipSubtitle = bindingContext.ParseResult.GetValueForOption(SkipSubtitle)!;
             if (bindingContext.ParseResult.HasOption(SkipCover)) option.SkipCover = bindingContext.ParseResult.GetValueForOption(SkipCover)!;
             if (bindingContext.ParseResult.HasOption(ForceHttp)) option.ForceHttp = bindingContext.ParseResult.GetValueForOption(ForceHttp)!;
@@ -192,6 +196,8 @@ internal static class CommandLineInvoker
             DecryptDrm,
             DrmKey,
             DrmKid,
+            Mp4decryptPath,
+            WvdPath,
             SkipSubtitle,
             SkipCover,
             ForceHttp,

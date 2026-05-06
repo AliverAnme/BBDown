@@ -939,7 +939,9 @@ partial class Program
             {
                 if (!string.IsNullOrEmpty(parsed.PsshBase64))
                 {
-                    var wvd = FindTool("device.wvd") ?? Path.Combine(AppContext.BaseDirectory, "device.wvd");
+                    var wvd = !string.IsNullOrEmpty(myOption.WvdPath) && File.Exists(myOption.WvdPath)
+                        ? myOption.WvdPath
+                        : FindTool("device.wvd") ?? Path.Combine(AppContext.BaseDirectory, "device.wvd");
                     if (File.Exists(wvd))
                     {
                         var keyResult = await DrmDecryptor.GetKeyWidevineAsync(parsed.PsshBase64, wvd);
@@ -978,10 +980,12 @@ partial class Program
 
         Log($"密钥获取成功: KEY={parsed.KeyHex[..Math.Min(8, parsed.KeyHex.Length)]}...");
 
-        var mp4decrypt = FindTool("mp4decrypt");
+        var mp4decrypt = !string.IsNullOrEmpty(myOption.Mp4decryptPath) && File.Exists(myOption.Mp4decryptPath)
+            ? myOption.Mp4decryptPath
+            : FindTool("mp4decrypt");
         if (string.IsNullOrEmpty(mp4decrypt))
         {
-            LogError("未找到 mp4decrypt，请安装 Bento4 (brew install bento4)");
+            LogError("未找到 mp4decrypt，请安装 Bento4 或通过 --mp4decrypt-path 指定路径");
             return;
         }
 
@@ -1037,18 +1041,41 @@ partial class Program
 
     private static string? FindTool(string name)
     {
-        var paths = Environment.GetEnvironmentVariable("PATH")?.Split(Path.PathSeparator) ?? Array.Empty<string>();
-        foreach (var dir in paths)
+        // 1. 优先搜索系统 PATH
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        var pathDirs = !string.IsNullOrEmpty(pathEnv)
+            ? pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            : Array.Empty<string>();
+
+        // 2. 然后搜索程序同目录及当前工作目录
+        var localDirs = new[] { AppContext.BaseDirectory, Environment.CurrentDirectory };
+
+        var allDirs = pathDirs.Concat(localDirs);
+
+        // Windows 下追加 .exe 后缀
+        var names = OperatingSystem.IsWindows()
+            ? new[] { name, name + ".exe" }
+            : new[] { name };
+
+        foreach (var dir in allDirs)
         {
-            var full = Path.Combine(dir, name);
-            if (File.Exists(full)) return full;
+            foreach (var n in names)
+            {
+                var full = Path.Combine(dir, n);
+                if (File.Exists(full)) return full;
+            }
         }
-        var extra = new[] { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" };
-        foreach (var dir in extra)
+
+        // 3. Unix/macOS 常见安装路径回退
+        if (!OperatingSystem.IsWindows())
         {
-            var full = Path.Combine(dir, name);
-            if (File.Exists(full)) return full;
+            foreach (var dir in new[] { "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin" })
+            {
+                var full = Path.Combine(dir, name);
+                if (File.Exists(full)) return full;
+            }
         }
+
         return null;
     }
 }
